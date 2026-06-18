@@ -511,8 +511,8 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 ### Contributors
 
 <!-- TODO: Update with actual contributor list -->
-- Lead Developer: [@rahil-events]
-- Design & UX: [Your Team]
+- Lead Developer: [@Gous Khan]
+- Design & UX: [Gous khan]
 
 ---
 
@@ -520,8 +520,8 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 Found a bug or have a feature request?
 
-1. Check [existing issues](https://github.com/your-org/kratos-2026/issues)
-2. [Create a new issue](https://github.com/your-org/kratos-2026/issues/new) with:
+1. Check [existing issues](github.com/Khangulamgousamjat/Event-Gous-Kratos)
+2. [Create a new issue](github.com/Khangulamgousamjat/Event-Gous-Kratos) with:
    - Clear title and description
    - Steps to reproduce (for bugs)
    - Expected vs actual behavior
@@ -533,7 +533,7 @@ Found a bug or have a feature request?
 
 For questions or support:
 
-- 📧 Email: rahilhussain431601@gmail.com
+- 📧 Email: gousk2004@gmail.com
 - 📖 Documentation: Check [ADMIN_GUIDE.md](ADMIN_GUIDE.md)
 
 ---
@@ -541,7 +541,7 @@ For questions or support:
 <div align="center">
 
 **Built with ❤️ for seamless event registration,**
-**Built by Rahil & Team**
+**Built by Gous Khan**
 
 [⬆ Back to top](#-kratos-2026-registration-platform)
 
