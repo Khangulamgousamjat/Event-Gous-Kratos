@@ -1,0 +1,45 @@
+
+> kratos-platform@0.1.0 lint
+> eslint
+
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\app\admin\users\page.tsx
+  4:10  warning  'eq' is defined but never used           @typescript-eslint/no-unused-vars
+  6:8   warning  'BrutalInput' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\app\admin\verify\[id]\page.tsx
+    7:8   warning  'BrutalButton' is defined but never used                                                                                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  163:21  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\app\auth\login\page.tsx
+   3:27  warning  'useEffect' is defined but never used                                                                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+  61:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\app\auth\register\page.tsx
+  48:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\app\events\[slug]\register\page.tsx
+  3:8  warning  'BrutalInput' is defined but never used          @typescript-eslint/no-unused-vars
+  4:8  warning  'BrutalButton' is defined but never used         @typescript-eslint/no-unused-vars
+  5:8  warning  'BrutalQRCode' is defined but never used         @typescript-eslint/no-unused-vars
+  8:7  warning  'StepHeader' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\app\layout.tsx
+  25:9  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+  26:9  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\components\dashboard\GalleryUploadClient.tsx
+  4:8  warning  'BrutalButton' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\components\marketing\EventsClientFilter.tsx
+  53:7  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\components\marketing\Hero.tsx
+  82:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+D:\WORK\Kratos 2k26\FINAL WEB\Rahil-Events\src\components\ui\BrutalQRCode.tsx
+  19:7  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

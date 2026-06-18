@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #FFFCF0;
+    --foreground: #1A1C1C;
+    --primary-container: #FFD100;
+    --on-primary-container: #000000;
+    --secondary-container: #FFF6D1;
+    --outline: #D4AF37;
+    --primary: #BC9000;
+    --surface-container-low: #FFF9D6;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-headline {
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.05em;
+  }
+}
+
+@theme {
+  --color-primary: var(--primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-surface: var(--background);
+  --color-on-surface: var(--foreground);
+  --color-secondary-container: var(--secondary-container);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-outline: var(--outline);
+
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+
+  --radius-none: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-full: 9999px;
+
+  --border-width-2: 2px;
+}
+
+@utility brutal-border {
+  border: 2px solid var(--foreground);
+}
+
+@utility brutal-input {
+  border: 2px solid var(--foreground);
+  background-color: var(--background);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  &:focus, &:active {
+    box-shadow: 4px 4px 0px 0px var(--foreground);
+    transform: translate(-2px, -2px);
+  }
+}
+
+@utility hard-shadow {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 4px 4px 0px 0px var(--foreground);
+  &:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: 6px 6px 0px 0px var(--foreground);
+  }
+}
+
+@utility hard-shadow-gold {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 6px 6px 0px 0px var(--primary-container);
+  &:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: 8px 8px 0px 0px var(--primary-container);
+  }
+}
+
+@utility tactile-click {
+  transition: all 0.1s ease;
+  &:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px 0px var(--foreground);
+  }
+}
+
+@utility material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@utility animate-marquee {
+  animation: marquee 25s linear infinite;
+}
+
+@utility glass {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(255, 252, 240, 0.6);
+  border: 1px solid rgba(255, 209, 0, 0.18);
+}
+
+@utility glass-card {
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  background: rgba(255, 252, 240, 0.45);
+  border: 2px solid var(--foreground);
+  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 0.08);
+}
+
+@utility glass-dark {
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  background: rgba(26, 28, 28, 0.75);
+  border: 1px solid rgba(255, 209, 0, 0.2);
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@utility animate-gradient {
+  animation: gradient-shift 8s ease infinite;
+  background-size: 200% 200%;
+}

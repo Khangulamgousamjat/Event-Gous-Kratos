@@ -1,0 +1,20 @@
+e18f024 feat: enhance registration workflow, ticketing, entry management, and admin auth
+9b73d92 fix: resolve checkin-schema mismatch and eliminate duplicate routes
+7f81004 fix: resolve TypeScript return type mismatches and eliminate duplicate checkin routes
+137c16d feat: implement individual QR check-ins, multi-member tickets, and admin-only credentials login
+cc38d90 Minor changes in Payment Flow
+db79532 Update documentation and shorten hero text
+9865a58 fix(db): remove unsupported transactions and refactor to sequential operations for neon-http compatibility
+0b27159 fix(registration): improve robustness, atomicity, and error logging for registration flow
+9b810de feat(admin): add logout button to dashboard header
+9159458 fix: improve mobile responsiveness across all pages
+200b4c4 Update shorten space between AnnouncementBar and Hero
+16e7f45 Update documentation and shorten hero text
+dbf9641 docs: rewrite all documentation with improved structure and formatting
+3e912cc chore: apply real data and fix platform bugs
+5950261 feat: simplify UX, remove branch dependencies, secure admin panel
+11c9921 chore: solve conflicts and generate schedule migration
+99fabfe feat: implement Squad Board and Team Messaging system
+b55dc97 Update README and add comprehensive DOCUMENTATION.md
+40a4e1e Merge branch 'main' of https://github.com/PRANAVBIRHADE/Rahil-Events
+6b83958 Fix all critical React rendering bugs, ESLint warnings, and Next.js 16.2 deprecations

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kratos.mpgi.ac.in/sitemap.xml
