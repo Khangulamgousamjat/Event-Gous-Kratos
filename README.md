@@ -1,4 +1,4 @@
-# 🎯 KRATOS 2026 — Enterprise Event Registration Platform
+# 🎯 KRATOS — Enterprise Event Registration Platform
 
 <div align="center">
 
