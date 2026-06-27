@@ -1,58 +1,70 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
-import * as schema from '../src/db/schema';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import * as bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
-import { eq } from 'drizzle-orm';
 
 dotenv.config({ path: '.env.local' });
 
-if (!process.env.DATABASE_URL) {
-  console.error('❌ Error: DATABASE_URL is not set in .env.local');
-  process.exit(1);
+// ── Firebase Admin Init ────────────────────────────────────────────────
+if (!getApps().length) {
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  initializeApp({
+    credential: cert({
+      projectId:   process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey,
+    }),
+  });
 }
 
-const sql = neon(process.env.DATABASE_URL);
-const db = drizzle(sql, { schema });
+const db = getFirestore();
+
+// ── Config ─────────────────────────────────────────────────────────────
+const ADMIN_NAME     = 'Gulamgous Khan';
+const ADMIN_EMAIL    = 'gousk2004@gmail.com';
+const ADMIN_PASSWORD = 'Kingkhan@12';
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL || 'admin@kratos.fest';
-  const password = process.env.SEED_ADMIN_PASSWORD;
-
-  if (!password || password === 'change-this-before-running-seed') {
-    console.error('❌ Error: Please set a strong SEED_ADMIN_PASSWORD in your .env.local file first.');
-    process.exit(1);
-  }
-
-  console.log(`🚀 Bootstrapping admin account: ${email}...`);
+  console.log(`🚀 Seeding admin account: ${ADMIN_EMAIL} ...`);
 
   // 1. Check if user already exists
-  const existingUser = await db.query.users.findFirst({
-    where: eq(schema.users.email, email),
-  });
+  const snap = await db.collection('users')
+    .where('email', '==', ADMIN_EMAIL)
+    .limit(1)
+    .get();
 
-  if (existingUser) {
-    console.log(`⚠️ User with email ${email} already exists. Updating role to ADMIN...`);
-    await db.update(schema.users)
-      .set({ role: 'ADMIN' })
-      .where(eq(schema.users.email, email));
-    console.log('✅ Role updated successfully.');
+  if (!snap.empty) {
+    const docRef = snap.docs[0].ref;
+    const data   = snap.docs[0].data();
+    if (data.role === 'ADMIN') {
+      console.log('✅ Admin account already exists. Nothing to do.');
+    } else {
+      await docRef.update({ role: 'ADMIN' });
+      console.log('✅ Existing user upgraded to ADMIN role.');
+    }
     return;
   }
 
   // 2. Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 12);
 
-  // 3. Create admin user
-  await db.insert(schema.users).values({
-    name: 'System Admin',
-    email: email,
-    password: hashedPassword,
-    role: 'ADMIN',
+  // 3. Create the admin document in Firestore
+  await db.collection('users').add({
+    name:      ADMIN_NAME,
+    email:     ADMIN_EMAIL,
+    password:  hashedPassword,
+    role:      'ADMIN',
+    createdAt: new Date().toISOString(),
   });
 
+  console.log('');
   console.log('✅ Admin account created successfully!');
-  console.log('👉 You can now log in at /auth/adminlogin');
+  console.log('─────────────────────────────────────');
+  console.log(`   Email    : ${ADMIN_EMAIL}`);
+  console.log(`   Password : ${ADMIN_PASSWORD}`);
+  console.log(`   Role     : ADMIN`);
+  console.log('─────────────────────────────────────');
+  console.log('👉 Log in at  /auth/adminlogin');
 }
 
 main().catch((err) => {
