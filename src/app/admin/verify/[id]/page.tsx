@@ -1,10 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { eq } from 'drizzle-orm';
 import BrutalCard from '@/components/ui/BrutalCard';
 import { db } from '@/db';
-import { events, registrations, teamMembers, users } from '@/db/schema';
 import { requireAdminPageAccess } from '@/lib/authz';
 import { updateRegistrationStatus, deleteRegistration } from '@/lib/actions';
 import { redirect } from 'next/navigation';
@@ -14,25 +12,28 @@ export default async function VerifyRegistrationPage({ params }: { params: Promi
 
   const { id } = await params;
 
-  const [data] = await db
-    .select({
-      event: events,
-      registration: registrations,
-      user: users,
-    })
-    .from(registrations)
-    .innerJoin(users, eq(registrations.userId, users.id))
-    .innerJoin(events, eq(registrations.eventId, events.id))
-    .where(eq(registrations.id, id));
-
-  if (!data) {
+  const regDoc = await db.collection('registrations').doc(id).get();
+  if (!regDoc.exists) {
     return notFound();
   }
+  const registration = { id: regDoc.id, ...regDoc.data() } as any;
 
-  const { event, registration, user } = data;
+  const userDoc = await db.collection('users').doc(registration.userId).get();
+  if (!userDoc.exists) {
+    return notFound();
+  }
+  const user = { id: userDoc.id, ...userDoc.data() } as any;
+
+  const eventDoc = await db.collection('events').doc(registration.eventId).get();
+  if (!eventDoc.exists) {
+    return notFound();
+  }
+  const event = { id: eventDoc.id, ...eventDoc.data() } as any;
+
   const members = registration.teamId
-    ? await db.select().from(teamMembers).where(eq(teamMembers.teamId, registration.teamId))
+    ? (await db.collection('teamMembers').where('teamId', '==', registration.teamId).get()).docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any))
     : [];
+
   const totalFee = registration.totalFee ?? event.fee;
 
   return (
@@ -122,7 +123,7 @@ export default async function VerifyRegistrationPage({ params }: { params: Promi
               {members.length > 0 ? (
                 <div className="space-y-4 mt-6">
                   <p className="opacity-60 uppercase font-sans font-bold text-xs">Additional Members</p>
-                  {members.map((member) => (
+                  {members.map((member: any) => (
                     <div
                       key={member.id}
                       className="bg-surface-container-low p-3 brutal-border flex justify-between items-center text-sm font-mono gap-4"

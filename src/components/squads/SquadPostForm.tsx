@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { InferSelectModel } from 'drizzle-orm';
-import { events } from '@/db/schema';
 import BrutalButton from '@/components/ui/BrutalButton';
 import { createSquadPost } from '@/lib/actions';
 
-type EventRecord = InferSelectModel<typeof events>;
-
 type SquadPostFormProps = {
-  events: Pick<EventRecord, 'id' | 'name'>[];
+  events: {
+    id: string;
+    name: string;
+  }[];
 };
 
 export default function SquadPostForm({ events }: SquadPostFormProps) {
@@ -38,7 +37,7 @@ export default function SquadPostForm({ events }: SquadPostFormProps) {
           className="w-full brutal-border bg-surface px-4 py-2 font-display font-bold uppercase text-xs"
         >
           <option value="">SELECT MODULE</option>
-          {events.map(e => (
+          {events.map((e: any) => (
             <option key={e.id} value={e.id}>{e.name}</option>
           ))}
         </select>

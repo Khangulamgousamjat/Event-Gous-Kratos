@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { desc, eq } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { db } from '@/db';
-import { events, registrations, users } from '@/db/schema';
 import { isStaffRole } from '@/lib/authz';
 
 function toCsvCell(value: string | null | undefined) {
@@ -21,29 +19,54 @@ export async function GET() {
   }
 
   try {
-    const proofs = await db
-      .select({
-        eventName: events.name,
-        participantName: users.name,
-        paymentScreenshot: registrations.paymentScreenshot,
-        status: registrations.status,
-        transactionId: registrations.transactionId,
-      })
-      .from(registrations)
-      .innerJoin(users, eq(registrations.userId, users.id))
-      .innerJoin(events, eq(registrations.eventId, events.id))
-      .orderBy(desc(registrations.createdAt));
+    const snap = await db.collection('registrations').get();
+    const regDocs = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
 
-    if (proofs.length === 0) {
+    if (regDocs.length === 0) {
       return new NextResponse('No payment records found.', { status: 404 });
+    }
+
+    // Sort by createdAt descending
+    regDocs.sort((a: any, b: any) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const userIds = Array.from(new Set(regDocs.map((r: any) => r.userId).filter(Boolean)));
+    const eventIds = Array.from(new Set(regDocs.map((r: any) => r.eventId).filter(Boolean)));
+
+    const usersMap: Record<string, string> = {};
+    const eventsMap: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const userSnaps = await Promise.all(
+        userIds.map((id) => db.collection('users').doc(id).get())
+      );
+      userSnaps.forEach((snap: any) => {
+        if (snap.exists) {
+          usersMap[snap.id] = (snap.data() as any).name;
+        }
+      });
+    }
+
+    if (eventIds.length > 0) {
+      const eventSnaps = await Promise.all(
+        eventIds.map((id) => db.collection('events').doc(id).get())
+      );
+      eventSnaps.forEach((snap: any) => {
+        if (snap.exists) {
+          eventsMap[snap.id] = (snap.data() as any).name;
+        }
+      });
     }
 
     const csv = [
       ['Participant Name', 'Event Name', 'Status', 'Transaction ID', 'Payment Screenshot URL'].join(','),
-      ...proofs.map((proof) =>
+      ...regDocs.map((proof: any) =>
         [
-          toCsvCell(proof.participantName),
-          toCsvCell(proof.eventName),
+          toCsvCell(usersMap[proof.userId]),
+          toCsvCell(eventsMap[proof.eventId]),
           toCsvCell(proof.status),
           toCsvCell(proof.transactionId),
           toCsvCell(proof.paymentScreenshot),

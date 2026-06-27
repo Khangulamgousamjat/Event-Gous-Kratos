@@ -1,6 +1,4 @@
 import { db } from '@/db';
-import { liveViewers } from '@/db/schema';
-import { sql } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
@@ -8,12 +6,10 @@ export async function POST(req: Request) {
     const { viewerId } = await req.json();
     if (!viewerId) return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
 
-    await db.insert(liveViewers)
-      .values({ viewerId, lastSeenAt: new Date() })
-      .onConflictDoUpdate({
-        target: liveViewers.viewerId,
-        set: { lastSeenAt: new Date() }
-      });
+    await db.collection('liveViewers').doc(viewerId).set({
+      viewerId,
+      lastSeenAt: new Date().toISOString(),
+    });
 
     return NextResponse.json({ success: true });
   } catch (e) {
@@ -27,13 +23,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const res = await db.select({ 
-      count: sql<number>`count(*)::int` 
-    })
-    .from(liveViewers)
-    .where(sql`last_seen_at >= now() - interval '15 seconds'`);
+    const fifteenSecsAgo = new Date(Date.now() - 15000).toISOString();
+    const activeViewers = await db.collection('liveViewers')
+      .where('lastSeenAt', '>=', fifteenSecsAgo)
+      .get();
 
-    return NextResponse.json({ count: res[0].count });
+    return NextResponse.json({ count: activeViewers.size });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ count: 0 }, { status: 500 });

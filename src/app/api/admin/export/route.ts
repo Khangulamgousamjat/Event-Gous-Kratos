@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { desc, eq, inArray } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { db } from '@/db';
-import { events, registrations, teamMembers, users } from '@/db/schema';
 import { isStaffRole } from '@/lib/authz';
 
 function toCsvCell(value: string | number | null | undefined) {
@@ -30,29 +28,23 @@ export async function GET(request: Request) {
     const dataset = searchParams.get('dataset') || 'participants';
 
     if (dataset === 'users') {
-      const allUsers = await db
-        .select({
-          branch: users.branch,
-          college: users.college,
-          email: users.email,
-          joinedAt: users.createdAt,
-          level: users.level,
-          name: users.name,
-          phone: users.phone,
-          role: users.role,
-          xp: users.xp,
-          year: users.year,
-        })
-        .from(users)
-        .orderBy(desc(users.createdAt));
+      const snap = await db.collection('users').get();
+      const allUsers = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
 
       if (allUsers.length === 0) {
         return new NextResponse('No users found.', { status: 404 });
       }
 
+      // Sort by createdAt descending
+      allUsers.sort((a: any, b: any) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+
       const csv = buildCsv(
         ['Name', 'Email', 'Phone', 'College', 'Branch', 'Year', 'Role', 'XP', 'Level', 'Joined'],
-        allUsers.map((row) => [
+        allUsers.map((row: any) => [
           row.name,
           row.email,
           row.phone,
@@ -62,7 +54,7 @@ export async function GET(request: Request) {
           row.role,
           row.xp,
           row.level,
-          row.joinedAt ? new Date(row.joinedAt).toISOString() : '',
+          row.createdAt ? new Date(row.createdAt).toISOString() : '',
         ]),
       );
 
@@ -75,80 +67,100 @@ export async function GET(request: Request) {
       });
     }
 
-    const registrationsData = await db
-      .select({
-        createdAt: registrations.createdAt,
-        eventName: events.name,
-        participantBranch: users.branch,
-        participantCollege: users.college,
-        participantEmail: users.email,
-        participantName: users.name,
-        participantPhone: users.phone,
-        participantYear: users.year,
-        registrationId: registrations.id,
-        status: registrations.status,
-        teamId: registrations.teamId,
-        teamName: registrations.teamName,
-        totalFee: registrations.totalFee,
-        transactionId: registrations.transactionId,
-      })
-      .from(registrations)
-      .innerJoin(users, eq(registrations.userId, users.id))
-      .innerJoin(events, eq(registrations.eventId, events.id))
-      .orderBy(desc(registrations.createdAt));
+    const regSnap = await db.collection('registrations').get();
+    const registrationsData = regSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
 
     if (registrationsData.length === 0) {
       return new NextResponse('No registrations found.', { status: 404 });
     }
 
+    // Sort by createdAt descending
+    registrationsData.sort((a: any, b: any) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const userIds = Array.from(new Set(registrationsData.map((r: any) => r.userId).filter(Boolean)));
+    const eventIds = Array.from(new Set(registrationsData.map((r: any) => r.eventId).filter(Boolean)));
+
+    const usersMap: Record<string, any> = {};
+    const eventsMap: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const userSnaps = await Promise.all(
+        userIds.map((id) => db.collection('users').doc(id).get())
+      );
+      userSnaps.forEach((snap: any) => {
+        if (snap.exists) {
+          usersMap[snap.id] = snap.data();
+        }
+      });
+    }
+
+    if (eventIds.length > 0) {
+      const eventSnaps = await Promise.all(
+        eventIds.map((id) => db.collection('events').doc(id).get())
+      );
+      eventSnaps.forEach((snap: any) => {
+        if (snap.exists) {
+          eventsMap[snap.id] = (snap.data() as any).name;
+        }
+      });
+    }
+
     const teamIds = registrationsData
-      .map((registration) => registration.teamId)
-      .filter((teamId): teamId is string => Boolean(teamId));
+      .map((registration: any) => registration.teamId)
+      .filter((teamId: any): teamId is string => Boolean(teamId));
 
-    const additionalMembers =
-      teamIds.length > 0
-        ? await db
-            .select({
-              branch: teamMembers.branch,
-              college: teamMembers.college,
-              name: teamMembers.name,
-              phone: teamMembers.phone,
-              teamId: teamMembers.teamId,
-              year: teamMembers.year,
-            })
-            .from(teamMembers)
-            .where(inArray(teamMembers.teamId, teamIds))
-        : [];
+    const additionalMembers: any[] = [];
+    if (teamIds.length > 0) {
+      // Chunk queries by 10 due to Firestore 'in' limit
+      const chunks: string[][] = [];
+      for (let i = 0; i < teamIds.length; i += 10) {
+        chunks.push(teamIds.slice(i, i + 10));
+      }
+      const snaps = await Promise.all(
+        chunks.map((chunk) => db.collection('teamMembers').where('teamId', 'in', chunk).get())
+      );
+      snaps.forEach((snap: any) => {
+        snap.docs.forEach((doc: any) => {
+          additionalMembers.push({ id: doc.id, ...doc.data() });
+        });
+      });
+    }
 
-    const membersByTeamId = new Map<string, typeof additionalMembers>();
-    additionalMembers.forEach((member) => {
+    const membersByTeamId = new Map<string, any[]>();
+    additionalMembers.forEach((member: any) => {
       const currentMembers = membersByTeamId.get(member.teamId) ?? [];
       currentMembers.push(member);
       membersByTeamId.set(member.teamId, currentMembers);
     });
 
-    const rows = registrationsData.flatMap((registration) => {
+    const rows = registrationsData.flatMap((registration: any) => {
       const baseRow = {
         createdAt: registration.createdAt ? new Date(registration.createdAt).toISOString() : '',
-        eventName: registration.eventName,
-        registrationId: registration.registrationId,
+        eventName: eventsMap[registration.eventId] || 'Unknown Event',
+        registrationId: registration.id,
         status: registration.status,
         teamName: registration.teamName || '',
         totalFee: registration.totalFee ?? '',
         transactionId: registration.transactionId || '',
       };
 
+      const userDetail = usersMap[registration.userId] || {};
+
       const leaderRow: Array<string | number | null | undefined> = [
         baseRow.registrationId,
         baseRow.eventName,
         baseRow.teamName,
         'Leader',
-        registration.participantName,
-        registration.participantEmail,
-        registration.participantPhone,
-        registration.participantCollege,
-        registration.participantBranch,
-        registration.participantYear,
+        userDetail.name || '',
+        userDetail.email || '',
+        userDetail.phone || '',
+        userDetail.college || '',
+        userDetail.branch || '',
+        userDetail.year || '',
         baseRow.status,
         baseRow.totalFee,
         baseRow.transactionId,
@@ -159,7 +171,7 @@ export async function GET(request: Request) {
 
       return [
         leaderRow,
-        ...extraRows.map((member) => [
+        ...extraRows.map((member: any) => [
           baseRow.registrationId,
           baseRow.eventName,
           baseRow.teamName,

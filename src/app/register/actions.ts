@@ -1,15 +1,6 @@
 'use server';
 
 import { db } from '@/db';
-import {
-  events as eventsTable,
-  registrations,
-  systemSettings,
-  teamMembers,
-  teams,
-  users,
-} from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { getRegistrationKillSwitchMessage, isRegistrationKillSwitchEnabled } from '@/lib/env';
 import {
@@ -41,19 +32,21 @@ export async function submitRegistration(formData: RegistrationSubmission): Prom
     return { success: false, error: getRegistrationKillSwitchMessage() };
   }
 
-  const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, formData.eventId)).limit(1);
-  if (!event) {
+  const eventSnapshot = await db.collection('events').doc(formData.eventId).get();
+  if (!eventSnapshot.exists) {
     return { success: false, error: 'Selected event was not found.' };
   }
+  const event = { id: eventSnapshot.id, ...eventSnapshot.data() } as any;
 
-  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1)).limit(1);
+  const settingsSnapshot = await db.collection('systemSettings').doc('1').get();
+  const settings = settingsSnapshot.exists ? (settingsSnapshot.data() as any) : null;
   const registrationPaused = settings?.registrationPaused ?? false;
   if (registrationPaused) {
     return { success: false, error: 'Registrations are temporarily closed due to technical maintenance' };
   }
 
   const registrationOpen = settings?.registrationOpen ?? true;
-  const deadline = settings?.deadline ?? null;
+  const deadline = settings?.deadline ? new Date(settings.deadline) : null;
 
   if (!registrationOpen || (deadline && new Date() > deadline)) {
     return { success: false, error: 'Registrations Closed' };
@@ -149,48 +142,49 @@ export async function submitRegistration(formData: RegistrationSubmission): Prom
   }
 
   let createdTeamId: string | null = null;
+  let userId: string | null = null;
 
   try {
-    const [existingUser] = await db.select().from(users).where(eq(users.email, leader.email)).limit(1);
-
-    const userRecord =
-      existingUser ??
-      (
-        await db
-          .insert(users)
-          .values({
-            branch: leader.branch,
-            college: leader.college,
-            email: leader.email,
-            name: leader.name,
-            password: null,
-            phone: leader.phone,
-            role: 'PARTICIPANT',
-            year: leader.year,
-          })
-          .returning()
-      )[0];
-
-    if (!userRecord) {
-      return { success: false, error: 'Unable to create participant record.' };
-    }
-
-    await db
-      .update(users)
-      .set({
+    const userSnapshot = await db.collection('users').where('email', '==', leader.email).limit(1).get();
+    
+    if (userSnapshot.empty) {
+      const userRef = await db.collection('users').add({
+        branch: leader.branch,
+        college: leader.college,
+        email: leader.email,
+        name: leader.name,
+        password: null,
+        phone: leader.phone,
+        role: 'PARTICIPANT',
+        year: leader.year,
+        createdAt: new Date().toISOString(),
+      });
+      userId = userRef.id;
+    } else {
+      const userDoc = userSnapshot.docs[0];
+      userId = userDoc.id;
+      await db.collection('users').doc(userId).update({
         branch: leader.branch,
         college: leader.college,
         name: leader.name,
         phone: leader.phone,
         year: leader.year,
-      })
-      .where(eq(users.id, userRecord.id));
+      });
+    }
 
-    const [existingRegistration] = await db
-      .select()
-      .from(registrations)
-      .where(and(eq(registrations.eventId, event.id), eq(registrations.userId, userRecord.id)))
-      .limit(1);
+    if (!userId) {
+      return { success: false, error: 'Unable to create participant record.' };
+    }
+
+    const regSnapshot = await db.collection('registrations')
+      .where('eventId', '==', event.id)
+      .where('userId', '==', userId)
+      .limit(1)
+      .get();
+
+    const existingRegistration = regSnapshot.empty
+      ? null
+      : { id: regSnapshot.docs[0].id, ...regSnapshot.docs[0].data() } as any;
 
     if (existingRegistration) {
       if (existingRegistration.status !== 'REJECTED') {
@@ -198,23 +192,27 @@ export async function submitRegistration(formData: RegistrationSubmission): Prom
       }
 
       if (existingRegistration.teamId) {
-        await db.delete(teamMembers).where(eq(teamMembers.teamId, existingRegistration.teamId));
-        await db.delete(teams).where(eq(teams.id, existingRegistration.teamId));
+        const teamMembersSnapshot = await db.collection('teamMembers')
+          .where('teamId', '==', existingRegistration.teamId)
+          .get();
+        
+        const batch = db.batch();
+        teamMembersSnapshot.docs.forEach((doc: any) => batch.delete(doc.ref));
+        batch.delete(db.collection('teams').doc(existingRegistration.teamId));
+        await batch.commit();
       }
 
-      await db.delete(registrations).where(eq(registrations.id, existingRegistration.id));
+      await db.collection('registrations').doc(existingRegistration.id).delete();
     }
 
     if (effectiveTeamMode) {
-      const [createdTeam] = await db
-        .insert(teams)
-        .values({
-          eventId: event.id,
-          name: resolvedTeamName as string,
-        })
-        .returning({ id: teams.id });
+      const teamRef = await db.collection('teams').add({
+        eventId: event.id,
+        name: resolvedTeamName as string,
+        createdAt: new Date().toISOString(),
+      });
 
-      createdTeamId = createdTeam?.id ?? null;
+      createdTeamId = teamRef.id;
 
       if (!createdTeamId) {
         return { success: false, error: 'Unable to create the team record.' };
@@ -222,20 +220,23 @@ export async function submitRegistration(formData: RegistrationSubmission): Prom
 
       const extraMembers = sanitizedMembers.slice(1);
       if (extraMembers.length > 0) {
-        await db.insert(teamMembers).values(
-          extraMembers.map((member) => ({
+        const batch = db.batch();
+        extraMembers.forEach((member) => {
+          const memberRef = db.collection('teamMembers').doc();
+          batch.set(memberRef, {
             branch: member.branch,
             college: member.college,
             name: member.name,
             phone: member.phone,
             teamId: createdTeamId as string,
             year: member.year,
-          })),
-        );
+          });
+        });
+        await batch.commit();
       }
     }
 
-    await db.insert(registrations).values({
+    await db.collection('registrations').add({
       eventId: event.id,
       members: sanitizedMembers.map((member) => ({
         branch: member.branch,
@@ -251,7 +252,8 @@ export async function submitRegistration(formData: RegistrationSubmission): Prom
       teamName: resolvedTeamName,
       totalFee,
       transactionId: requiresPayment ? transactionId : null,
-      userId: userRecord.id,
+      userId: userId,
+      createdAt: new Date().toISOString(),
     });
 
     revalidatePath('/admin/dashboard');
@@ -261,8 +263,17 @@ export async function submitRegistration(formData: RegistrationSubmission): Prom
     return { success: true };
   } catch (error) {
     if (createdTeamId) {
-      await db.delete(teamMembers).where(eq(teamMembers.teamId, createdTeamId));
-      await db.delete(teams).where(eq(teams.id, createdTeamId));
+      try {
+        const teamMembersSnapshot = await db.collection('teamMembers')
+          .where('teamId', '==', createdTeamId)
+          .get();
+        const batch = db.batch();
+        teamMembersSnapshot.docs.forEach((doc: any) => batch.delete(doc.ref));
+        batch.delete(db.collection('teams').doc(createdTeamId));
+        await batch.commit();
+      } catch (cleanupErr) {
+        console.error('Failed to clean up team on error:', cleanupErr);
+      }
     }
 
     console.error('Registration error:', error);

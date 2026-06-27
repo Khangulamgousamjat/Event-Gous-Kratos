@@ -3,8 +3,6 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/db';
-import { users, registrations, events, teamMembers, systemSettings, galleryPhotos, scheduleSlots } from '@/db/schema';
-import { asc, eq, inArray } from 'drizzle-orm';
 import BrutalCard from '@/components/ui/BrutalCard';
 import BrutalButton from '@/components/ui/BrutalButton';
 import LogoutButton from '@/components/dashboard/LogoutButton';
@@ -14,7 +12,6 @@ import { getPlayerRank } from '@/lib/xp';
 import { Zap } from 'lucide-react';
 import { formatScheduleSummary, sortScheduleEntries, type ScheduleEntry } from '@/lib/schedule';
 
-
 export default async function DashboardPage() {
   const session = await auth();
 
@@ -23,55 +20,83 @@ export default async function DashboardPage() {
   }
 
   // Fetch actual user data
-  const [dbUser] = await db.select().from(users).where(eq(users.email, session.user.email));
-
-  if (!dbUser) {
+  const userSnap = await db.collection('users').where('email', '==', session.user.email).limit(1).get();
+  if (userSnap.empty) {
     redirect('/auth/login');
   }
+  const dbUser = { id: userSnap.docs[0].id, ...userSnap.docs[0].data() } as any;
 
   if (!dbUser.college || !dbUser.branch || !dbUser.phone) {
     redirect('/profile/complete');
   }
 
   // Fetch active registrations joined with event info
-  const dbRegistrations = await db.select({
-    id: registrations.id,
-    eventId: registrations.eventId,
-    status: registrations.status,
-    teamName: registrations.teamName,
-    teamId: registrations.teamId,
-    eventName: events.name,
-    eventSlug: events.slug,
-    format: events.format,
-    schedule: events.schedule,
-    venue: events.venue,
-  })
-  .from(registrations)
-  .innerJoin(events, eq(registrations.eventId, events.id))
-  .where(eq(registrations.userId, dbUser.id));
+  const regsSnap = await db.collection('registrations').where('userId', '==', dbUser.id).get();
+  const regs = regsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+
+  const eventIds = Array.from(new Set(regs.map((r: any) => r.eventId).filter(Boolean)));
+  const eventsMap: Record<string, any> = {};
+  if (eventIds.length > 0) {
+    const eventSnaps = await Promise.all(
+      eventIds.map((eid: any) => db.collection('events').doc(eid).get())
+    );
+    eventSnaps.forEach((snap: any) => {
+      if (snap.exists) {
+        eventsMap[snap.id] = snap.data();
+      }
+    });
+  }
+
+  const dbRegistrations = regs.map((reg: any) => {
+    const event = eventsMap[reg.eventId] || {};
+    return {
+      id: reg.id,
+      eventId: reg.eventId,
+      status: reg.status,
+      teamName: reg.teamName,
+      teamId: reg.teamId,
+      eventName: event.name || 'Unknown Event',
+      eventSlug: event.slug || '',
+      format: event.format || 'SOLO',
+      schedule: event.schedule || '',
+      venue: event.venue || '',
+    };
+  });
 
   // Fetch all team members for these registrations
-  const teamIds = dbRegistrations.map(r => r.teamId).filter(id => !!id) as string[];
+  const teamIds = dbRegistrations.map((r: any) => r.teamId).filter((id: any) => !!id) as string[];
   
-  const allTeamMembers = teamIds.length > 0 
-    ? await db.select().from(teamMembers).where(inArray(teamMembers.teamId, teamIds))
-    : [];
+  const allTeamMembers: any[] = [];
+  if (teamIds.length > 0) {
+    const chunkSize = 30;
+    for (let i = 0; i < teamIds.length; i += chunkSize) {
+      const chunk = teamIds.slice(i, i + chunkSize);
+      const membersSnap = await db.collection('teamMembers').where('teamId', 'in', chunk).get();
+      membersSnap.docs.forEach((doc: any) => {
+        allTeamMembers.push({ id: doc.id, ...doc.data() });
+      });
+    }
+  }
 
-  const eventIds = Array.from(new Set(dbRegistrations.map((registration) => registration.eventId)));
-  const structuredSlots =
-    eventIds.length > 0
-      ? await db
-          .select({
-            linkedEventId: scheduleSlots.linkedEventId,
-            day: scheduleSlots.day,
-            sortIndex: scheduleSlots.sortIndex,
-            timeSlot: scheduleSlots.timeSlot,
-            venue: scheduleSlots.venue,
-          })
-          .from(scheduleSlots)
-          .where(inArray(scheduleSlots.linkedEventId, eventIds))
-          .orderBy(asc(scheduleSlots.day), asc(scheduleSlots.sortIndex))
-      : [];
+  const structuredSlots: any[] = [];
+  if (eventIds.length > 0) {
+    const chunkSize = 30;
+    for (let i = 0; i < eventIds.length; i += chunkSize) {
+      const chunk = eventIds.slice(i, i + chunkSize);
+      const slotsSnap = await db.collection('scheduleSlots').where('linkedEventId', 'in', chunk).get();
+      slotsSnap.docs.forEach((doc: any) => {
+        structuredSlots.push({ id: doc.id, ...doc.data() });
+      });
+    }
+  }
+
+  // Order structuredSlots by day asc, sortIndex asc in-memory
+  structuredSlots.sort((a: any, b: any) => {
+    if (a.day !== b.day) {
+      return (a.day || 0) - (b.day || 0);
+    }
+    return (a.sortIndex || 0) - (b.sortIndex || 0);
+  });
 
   const slotsByEventId = new Map<
     string,
@@ -91,7 +116,7 @@ export default async function DashboardPage() {
   }
 
   const userSchedule = sortScheduleEntries(
-    dbRegistrations.flatMap((registration): ScheduleEntry[] => {
+    dbRegistrations.flatMap((registration: any): ScheduleEntry[] => {
       const eventSlots = slotsByEventId.get(registration.eventId) ?? [];
 
       if (eventSlots.length === 0) {
@@ -110,7 +135,7 @@ export default async function DashboardPage() {
         ];
       }
 
-      return eventSlots.map((slot) => ({
+      return eventSlots.map((slot: any) => ({
         id: `${registration.id}-${slot.day}-${slot.sortIndex}`,
         eventName: registration.eventName,
         status: registration.status,
@@ -123,16 +148,20 @@ export default async function DashboardPage() {
       }));
     }),
   );
-  const dbSettings = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-  const isGalleryLocked = dbSettings.length > 0 ? dbSettings[0].isGalleryLocked ?? true : true;
 
-  const userPhotos = await db.select({
-    id: galleryPhotos.id,
-    imageUrl: galleryPhotos.imageUrl
-  }).from(galleryPhotos).where(eq(galleryPhotos.userId, dbUser.id));
+  const settingsDoc = await db.collection('systemSettings').doc('1').get();
+  const isGalleryLocked = settingsDoc.exists ? (settingsDoc.data() as any).isGalleryLocked ?? true : true;
+
+  const photosSnap = await db.collection('galleryPhotos').where('userId', '==', dbUser.id).get();
+  const userPhotos = photosSnap.docs.map((doc: any) => {
+    const data = doc.data() as any;
+    return {
+      id: doc.id,
+      imageUrl: data.imageUrl,
+    };
+  });
 
   const rank = getPlayerRank(dbUser.xp || 0);
-
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">
@@ -206,14 +235,14 @@ export default async function DashboardPage() {
             </div>
 
             <div className="space-y-6">
-              {dbRegistrations.map((reg) => (
+              {dbRegistrations.map((reg: any) => (
                 <TicketCard 
                   key={reg.id} 
                   reg={reg} 
                   userName={dbUser.name} 
                   college={dbUser.college} 
                   currentUserId={dbUser.id}
-                  teamMembers={allTeamMembers.filter(m => m.teamId === reg.teamId)}
+                  teamMembers={allTeamMembers.filter((m: any) => m.teamId === reg.teamId)}
                 />
               ))}
               {dbRegistrations.length === 0 && (
@@ -237,7 +266,7 @@ export default async function DashboardPage() {
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Chronological Timeline</p>
               </div>
               <div className="space-y-4">
-                {userSchedule.map((entry) => (
+                {userSchedule.map((entry: any) => (
                     <div key={entry.id} className="flex gap-6 items-center p-4 border-2 border-surface/20 hover:border-primary-container transition-colors group">
                       <div className="w-24 shrink-0 text-center border-r-2 border-surface/20 pr-4">
                         <p className="text-[10px] font-black uppercase opacity-60 mb-1">

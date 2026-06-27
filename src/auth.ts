@@ -2,8 +2,6 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { getRequestIp, applyRateLimit } from '@/lib/rate-limit';
 
@@ -38,7 +36,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const [user] = await db.select().from(users).where(eq(users.email, credentials.email as string));
+        const userSnapshot = await db.collection('users').where('email', '==', credentials.email).limit(1).get();
+        if (userSnapshot.empty) return null;
+        const userDoc = userSnapshot.docs[0];
+        const user = { id: userDoc.id, ...userDoc.data() } as any;
 
         if (!user || !user.password) return null;
 
@@ -65,13 +66,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
-        const existingUser = await db.select().from(users).where(eq(users.email, user.email as string)).limit(1);
-        if (existingUser.length === 0) {
+        const userSnapshot = await db.collection('users').where('email', '==', user.email).limit(1).get();
+        if (userSnapshot.empty) {
           try {
-            await db.insert(users).values({
+            await db.collection('users').add({
               name: user.name as string,
               email: user.email as string,
               role: 'PARTICIPANT',
+              createdAt: new Date().toISOString(),
             });
           } catch (error) {
             console.error('Failed to sync Google user to database:', error);
@@ -83,10 +85,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, user, account }) {
       if (account?.provider === 'google') {
-        const existingUser = await db.select().from(users).where(eq(users.email, token.email as string)).limit(1);
-        if (existingUser.length > 0) {
-          token.role = existingUser[0].role ?? 'PARTICIPANT';
-          token.id = existingUser[0].id;
+        const userSnapshot = await db.collection('users').where('email', '==', token.email).limit(1).get();
+        if (!userSnapshot.empty) {
+          const userDoc = userSnapshot.docs[0];
+          const userData = userDoc.data();
+          token.role = userData.role ?? 'PARTICIPANT';
+          token.id = userDoc.id;
         } else {
           token.role = 'PARTICIPANT';
         }

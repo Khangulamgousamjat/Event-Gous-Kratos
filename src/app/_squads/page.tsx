@@ -1,8 +1,6 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { db } from '@/db';
-import { squadPosts, users, events } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
 import BrutalCard from '@/components/ui/BrutalCard';
 import BrutalButton from '@/components/ui/BrutalButton';
 import { auth } from '@/auth';
@@ -13,25 +11,63 @@ export const dynamic = 'force-dynamic';
 
 async function SquadList() {
   const session = await auth();
-  const allPosts = await db.select({
-    id: squadPosts.id,
-    bio: squadPosts.bio,
-    createdAt: squadPosts.createdAt,
-    userName: users.name,
-    userId: users.id,
-    userEmail: users.email,
-    userBranch: users.branch,
-    eventName: events.name,
-    eventId: events.id,
-  })
-    .from(squadPosts)
-    .innerJoin(users, eq(squadPosts.userId, users.id))
-    .innerJoin(events, eq(squadPosts.eventId, events.id))
-    .orderBy(desc(squadPosts.createdAt));
+
+  const postsSnap = await db.collection('squadPosts').get();
+  const posts = postsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+
+  // Sort by createdAt descending
+  posts.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  const userIds = Array.from(new Set(posts.map((p: any) => p.userId).filter(Boolean)));
+  const eventIds = Array.from(new Set(posts.map((p: any) => p.eventId).filter(Boolean)));
+
+  const usersMap: Record<string, any> = {};
+  if (userIds.length > 0) {
+    const userSnaps = await Promise.all(
+      userIds.map((uid: any) => db.collection('users').doc(uid).get())
+    );
+    userSnaps.forEach((snap: any) => {
+      if (snap.exists) {
+        usersMap[snap.id] = snap.data();
+      }
+    });
+  }
+
+  const eventsMap: Record<string, any> = {};
+  if (eventIds.length > 0) {
+    const eventSnaps = await Promise.all(
+      eventIds.map((eid: any) => db.collection('events').doc(eid).get())
+    );
+    eventSnaps.forEach((snap: any) => {
+      if (snap.exists) {
+        eventsMap[snap.id] = snap.data();
+      }
+    });
+  }
+
+  const allPosts = posts.map((post: any) => {
+    const user = usersMap[post.userId] || {};
+    const event = eventsMap[post.eventId] || {};
+    return {
+      id: post.id,
+      bio: post.bio,
+      createdAt: post.createdAt,
+      userName: user.name || 'Unknown User',
+      userId: post.userId,
+      userEmail: user.email || '',
+      userBranch: user.branch || '',
+      eventName: event.name || 'Unknown Event',
+      eventId: post.eventId,
+    };
+  });
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-      {allPosts.map((post) => (
+      {allPosts.map((post: any) => (
         <BrutalCard key={post.id} className="p-8 relative group" shadowColor="gold">
           <div className="flex justify-between items-start mb-6">
             <div>
@@ -79,7 +115,9 @@ async function SquadList() {
 
 export default async function SquadsPage() {
   const session = await auth();
-  const allEvents = await db.select().from(events);
+  
+  const eventsSnap = await db.collection('events').get();
+  const allEvents = eventsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
 
   return (
     <main className="min-h-screen bg-surface pt-20 pb-32">

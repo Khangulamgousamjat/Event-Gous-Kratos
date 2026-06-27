@@ -1,7 +1,5 @@
 import React from 'react';
 import { db } from '@/db';
-import { events as eventsTable, systemSettings } from '@/db/schema';
-import { asc, eq } from 'drizzle-orm';
 import UnifiedRegistrationForm from './UnifiedRegistrationForm';
 import { isRegistrationKillSwitchEnabled, getRegistrationKillSwitchMessage } from '@/lib/env';
 import { resolvePerParticipantFee } from '@/lib/registration';
@@ -12,17 +10,31 @@ export default async function RegistrationPage(props: { searchParams: Promise<{ 
   const searchParams = await props.searchParams;
   const requestedEvent = searchParams.event?.trim() || '';
 
-  const allEventsRawSorted = await db.select().from(eventsTable).orderBy(asc(eventsTable.sortOrder), asc(eventsTable.name));
-  const allEventsRaw = [...allEventsRawSorted].reverse();
-  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
+  const eventsSnap = await db.collection('events').get();
+  const allEventsRaw = eventsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: sortOrder desc, then name desc (corresponds to reverse of asc-asc)
+  allEventsRaw.sort((a: any, b: any) => {
+    const sortOrderA = a.sortOrder || 0;
+    const sortOrderB = b.sortOrder || 0;
+    if (sortOrderA !== sortOrderB) {
+      return sortOrderB - sortOrderA;
+    }
+    const nameA = a.name || '';
+    const nameB = b.name || '';
+    return nameB.localeCompare(nameA);
+  });
 
-  const allEvents = allEventsRaw.map((event) => ({
+  const settingsDoc = await db.collection('systemSettings').doc('1').get();
+  const settings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
+
+  const allEvents = allEventsRaw.map((event: any) => ({
     ...event,
     fee: resolvePerParticipantFee(event.fee, settings?.feePerPerson),
   }));
 
   const preselectedEventId =
-    allEvents.find((event) => event.id === requestedEvent || event.slug === requestedEvent)?.id ?? '';
+    allEvents.find((event: any) => event.id === requestedEvent || event.slug === requestedEvent)?.id ?? '';
 
   const registrationOpen = settings?.registrationOpen ?? true;
   const registrationPaused = settings?.registrationPaused ?? false;
@@ -31,7 +43,7 @@ export default async function RegistrationPage(props: { searchParams: Promise<{ 
 
   const isKilled = isRegistrationKillSwitchEnabled();
   const killMessage = getRegistrationKillSwitchMessage();
-  let isRegistrationClosed = !registrationOpen || (deadline && now > deadline);
+  let isRegistrationClosed = !registrationOpen || (deadline && now > new Date(deadline));
 
   if (isKilled) {
     isRegistrationClosed = true;

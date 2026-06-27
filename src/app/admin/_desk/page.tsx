@@ -1,8 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { events, registrations, users } from '@/db/schema';
 import { requireStaffPageAccess } from '@/lib/authz';
 import WalkInDeskForm from '@/components/admin/WalkInDeskForm';
 import BrutalCard from '@/components/ui/BrutalCard';
@@ -12,31 +10,52 @@ export const dynamic = 'force-dynamic';
 export default async function AdminDeskPage() {
   await requireStaffPageAccess();
 
-  const allEvents = await db
-    .select({
-      id: events.id,
-      name: events.name,
-      format: events.format,
-      teamSizeMin: events.teamSizeMin,
-      teamSize: events.teamSize,
-      fee: events.fee,
-    })
-    .from(events)
-    .orderBy(desc(events.createdAt));
+  const eventsSnap = await db.collection('events').get();
+  const allEvents = eventsSnap.docs.map((doc: any) => {
+    const data = doc.data() as any;
+    return {
+      id: doc.id,
+      name: data.name,
+      format: data.format,
+      teamSizeMin: data.teamSizeMin,
+      teamSize: data.teamSize,
+      fee: data.fee,
+      createdAt: data.createdAt,
+    };
+  });
+  
+  // Sort in-memory: createdAt desc
+  allEvents.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
-  const latestDeskEntries = await db
-    .select({
-      id: registrations.id,
-      participantName: users.name,
-      eventName: events.name,
-      createdAt: registrations.createdAt,
-      status: registrations.status,
+  const regsSnap = await db.collection('registrations').get();
+  const regs = regsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: createdAt desc
+  regs.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+  
+  const recentRegs = regs.slice(0, 8);
+  
+  const latestDeskEntries = await Promise.all(
+    recentRegs.map(async (reg: any) => {
+      const userDoc = await db.collection('users').doc(reg.userId).get();
+      const eventDoc = await db.collection('events').doc(reg.eventId).get();
+      return {
+        id: reg.id,
+        participantName: userDoc.exists ? (userDoc.data() as any).name : 'Unknown User',
+        eventName: eventDoc.exists ? (eventDoc.data() as any).name : 'Unknown Event',
+        createdAt: reg.createdAt,
+        status: reg.status,
+      };
     })
-    .from(registrations)
-    .innerJoin(users, eq(registrations.userId, users.id))
-    .innerJoin(events, eq(registrations.eventId, events.id))
-    .orderBy(desc(registrations.createdAt))
-    .limit(8);
+  );
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">
@@ -74,7 +93,7 @@ export default async function AdminDeskPage() {
               {latestDeskEntries.length === 0 ? (
                 <div className="p-6 text-center text-xs font-black uppercase opacity-40">No desk entries yet</div>
               ) : (
-                latestDeskEntries.map((entry) => (
+                latestDeskEntries.map((entry: any) => (
                   <div key={entry.id} className="p-4">
                     <p className="font-black uppercase">{entry.participantName}</p>
                     <p className="text-[10px] font-black uppercase opacity-60">{entry.eventName}</p>

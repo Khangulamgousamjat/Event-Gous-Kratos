@@ -1,22 +1,43 @@
 import React from 'react';
 import BrutalCard from '@/components/ui/BrutalCard';
 import { db } from '@/db';
-import { galleryPhotos, systemSettings, users } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
 import Image from 'next/image';
 
 export default async function Gallery() {
-  const dbSettings = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-  const isGalleryLocked = dbSettings.length > 0 ? dbSettings[0].isGalleryLocked ?? true : true;
+  const settingsDoc = await db.collection('systemSettings').doc('1').get();
+  const isGalleryLocked = settingsDoc.exists ? (settingsDoc.data() as any).isGalleryLocked ?? true : true;
 
-  const photos = await db.select({
-    id: galleryPhotos.id,
-    imageUrl: galleryPhotos.imageUrl,
-    uploaderName: users.name,
-  })
-  .from(galleryPhotos)
-  .innerJoin(users, eq(galleryPhotos.userId, users.id))
-  .orderBy(desc(galleryPhotos.createdAt));
+  const photosSnap = await db.collection('galleryPhotos').get();
+  const rawPhotos = photosSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: createdAt desc
+  rawPhotos.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  const uids = Array.from(new Set(rawPhotos.map((p: any) => p.userId).filter(Boolean)));
+  const usersMap: Record<string, any> = {};
+  if (uids.length > 0) {
+    const userSnaps = await Promise.all(
+      uids.map((uid: any) => db.collection('users').doc(uid).get())
+    );
+    userSnaps.forEach((snap: any) => {
+      if (snap.exists) {
+        usersMap[snap.id] = snap.data();
+      }
+    });
+  }
+
+  const photos = rawPhotos.map((photo: any) => {
+    const user = usersMap[photo.userId] || {};
+    return {
+      id: photo.id,
+      imageUrl: photo.imageUrl,
+      uploaderName: user.name || 'Unknown User',
+    };
+  });
 
   return (
     <section id="gallery" className="py-24 bg-surface-container-low border-t-4 border-on-surface">
@@ -48,7 +69,7 @@ export default async function Gallery() {
                  <p className="font-bold opacity-30 uppercase text-xs mt-2 tracking-widest">Awaiting user transmissions...</p>
                </div>
             ) : (
-              photos.map((photo) => (
+              photos.map((photo: any) => (
                 <BrutalCard key={photo.id} className="p-0 border-4 border-on-surface flex flex-col group overflow-hidden" shadowColor="black">
                   <div className="relative aspect-square w-full border-b-4 border-on-surface">
                     <Image 

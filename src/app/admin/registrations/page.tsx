@@ -1,7 +1,5 @@
 import React from 'react';
 import { db } from '@/db';
-import { registrations, users, events, teamMembers } from '@/db/schema';
-import { desc, eq } from 'drizzle-orm';
 import Link from 'next/link';
 import TrafficRegistryClient from '@/components/admin/TrafficRegistryClient';
 import { requireStaffPageAccess } from '@/lib/authz';
@@ -12,25 +10,48 @@ export const revalidate = 0;
 export default async function AdminRegistrationsPage() {
   const session = await requireStaffPageAccess();
 
-  const allRegistrations = await db.select({
-    id: registrations.id,
-    participantName: users.name,
-    participantEmail: users.email,
-    eventName: events.name,
-    eventId: registrations.eventId,
-    amount: registrations.totalFee,
-    status: registrations.status,
-    createdAt: registrations.createdAt,
-    transactionId: registrations.transactionId,
-    teamId: registrations.teamId,
-    teamName: registrations.teamName,
-  })
-  .from(registrations)
-  .innerJoin(users, eq(registrations.userId, users.id))
-  .innerJoin(events, eq(registrations.eventId, events.id))
-  .orderBy(desc(registrations.createdAt));
+  const usersSnap = await db.collection('users').get();
+  const usersMap: Record<string, any> = {};
+  usersSnap.docs.forEach((doc: any) => {
+    usersMap[doc.id] = doc.data();
+  });
 
-  const allTeamMembers = await db.select().from(teamMembers);
+  const eventsSnap = await db.collection('events').get();
+  const eventsMap: Record<string, any> = {};
+  eventsSnap.docs.forEach((doc: any) => {
+    eventsMap[doc.id] = doc.data();
+  });
+
+  const regsSnap = await db.collection('registrations').get();
+  const regs = regsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+
+  // Sort in-memory: createdAt desc
+  regs.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  const allRegistrations = regs.map((reg: any) => {
+    const user = usersMap[reg.userId] || {};
+    const event = eventsMap[reg.eventId] || {};
+    return {
+      id: reg.id,
+      participantName: user.name || 'Unknown User',
+      participantEmail: user.email || '',
+      eventName: event.name || 'Unknown Event',
+      eventId: reg.eventId,
+      amount: reg.totalFee,
+      status: reg.status,
+      createdAt: reg.createdAt,
+      transactionId: reg.transactionId,
+      teamId: reg.teamId,
+      teamName: reg.teamName,
+    };
+  });
+
+  const teamMembersSnap = await db.collection('teamMembers').get();
+  const allTeamMembers = teamMembersSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">

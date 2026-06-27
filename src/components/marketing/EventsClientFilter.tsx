@@ -1,12 +1,19 @@
 'use client';
 
 import React, { Suspense } from 'react';
-import type { InferSelectModel } from 'drizzle-orm';
 import Link from 'next/link';
-import { events } from '@/db/schema';
 
-type EventRecord = InferSelectModel<typeof events>;
-type EventCardRecord = Pick<EventRecord, 'id' | 'name' | 'description' | 'tagline' | 'slug' | 'fee' | 'format' | 'teamSize' | 'teamSizeMin'>;
+type EventCardRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  tagline: string | null;
+  slug: string;
+  fee: number;
+  format: string | null;
+  teamSize: number | null;
+  teamSizeMin: number | null;
+};
 
 const getFormatLabel = (format: string | null) => {
   switch (format) {
@@ -36,7 +43,7 @@ function FilterContent({ allEvents, isRegistrationClosed }: { allEvents: EventCa
   return (
     <div className="mb-16">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0 brutal-border overflow-hidden">
-        {allEvents.map((event) => (
+        {allEvents.map((event: any) => (
           <div key={event.id} className="p-5 md:p-8 border-b-2 border-r-2 last:border-b-0 md:last:border-b-2 lg:[&:nth-child(3n)]:border-r-0 border-on-surface flex flex-col justify-between hover:bg-primary-container transition-colors group">
             <div>
               <div className="flex justify-between items-start mb-6">

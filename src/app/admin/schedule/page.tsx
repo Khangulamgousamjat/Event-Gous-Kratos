@@ -1,8 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { desc } from 'drizzle-orm';
 import { db } from '@/db';
-import { events, scheduleSlots } from '@/db/schema';
 import BrutalCard from '@/components/ui/BrutalCard';
 import BrutalButton from '@/components/ui/BrutalButton';
 import { updateScheduleSlots } from '@/lib/actions';
@@ -13,8 +11,18 @@ export const dynamic = 'force-dynamic';
 export default async function AdminSchedulePage() {
   await requireAdminPageAccess();
 
-  const allEvents = await db.select().from(events).orderBy(desc(events.createdAt));
-  const existingSlots = await db.select().from(scheduleSlots);
+  const eventsSnap = await db.collection('events').get();
+  const allEvents = eventsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: createdAt desc
+  allEvents.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  const scheduleSlotsSnap = await db.collection('scheduleSlots').get();
+  const existingSlots = scheduleSlotsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
 
   const slotDefs = [
     { sortIndex: 1, timeSlot: '10:30 AM - 11:00 AM' },
@@ -24,7 +32,7 @@ export default async function AdminSchedulePage() {
     { sortIndex: 5, timeSlot: '04:00 PM - 05:30 PM' },
   ];
 
-  const slotByDayAndIndex = new Map<string, (typeof existingSlots)[number]>();
+  const slotByDayAndIndex = new Map<string, any>();
   for (const slot of existingSlots) {
     slotByDayAndIndex.set(`${slot.day}-${slot.sortIndex}`, slot);
   }
@@ -75,7 +83,7 @@ export default async function AdminSchedulePage() {
                               className="w-full p-2 brutal-border bg-surface text-xs font-bold uppercase outline-none focus:border-primary"
                             >
                               <option value="">- Unassigned -</option>
-                              {allEvents.map((event) => (
+                              {allEvents.map((event: any) => (
                                 <option key={event.id} value={event.id}>
                                   {event.name}
                                 </option>
@@ -105,7 +113,7 @@ export default async function AdminSchedulePage() {
                               className="w-full p-2 brutal-border bg-surface text-xs font-bold uppercase outline-none focus:border-primary"
                             >
                               <option value="">- Unassigned -</option>
-                              {allEvents.map((event) => (
+                              {allEvents.map((event: any) => (
                                 <option key={event.id} value={event.id}>
                                   {event.name}
                                 </option>

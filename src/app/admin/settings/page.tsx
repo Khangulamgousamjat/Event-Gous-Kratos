@@ -1,7 +1,5 @@
 import React from 'react';
 import { db } from '@/db';
-import { systemSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 import BrutalCard from '@/components/ui/BrutalCard';
 import BrutalButton from '@/components/ui/BrutalButton';
 import Link from 'next/link';
@@ -16,9 +14,10 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-function toDateTimeLocalValue(d: Date | null | undefined) {
+function toDateTimeLocalValue(d: any) {
   if (!d) return '';
   const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
@@ -30,7 +29,8 @@ function toDateTimeLocalValue(d: Date | null | undefined) {
 export default async function AdminSettingsPage() {
   await requireAdminPageAccess();
 
-  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
+  const settingsDoc = await db.collection('systemSettings').doc('1').get();
+  const settings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
 
   const registrationOpen = settings?.registrationOpen ?? true;
   const registrationPaused = settings?.registrationPaused ?? false;

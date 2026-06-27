@@ -1,8 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { events as eventsTable, registrations, teamMembers, users } from '@/db/schema';
-import { desc, eq, inArray, or } from 'drizzle-orm';
+import { Filter } from 'firebase-admin/firestore';
 import { getPhoneCandidates, normalizePhone, normalizeTransactionId } from '@/lib/registration';
 
 type StatusLookupResult =
@@ -30,37 +29,37 @@ export async function lookupStatus(query: string): Promise<StatusLookupResult> {
   try {
     const phoneCandidates = getPhoneCandidates(trimmedQuery);
 
-    const leaderMatches =
-      phoneCandidates.length > 0
-        ? await db
-            .select({ id: users.id })
-            .from(users)
-            .where(inArray(users.phone, phoneCandidates))
-        : [];
+    let leaderIds: string[] = [];
+    if (phoneCandidates.length > 0) {
+      const usersSnap = await db.collection('users')
+        .where('phone', 'in', phoneCandidates)
+        .limit(10)
+        .get();
+      leaderIds = usersSnap.docs.map((doc: any) => doc.id);
+    }
 
-    const teamMatches =
-      phoneCandidates.length > 0
-        ? await db
-            .select({ teamId: teamMembers.teamId })
-            .from(teamMembers)
-            .where(inArray(teamMembers.phone, phoneCandidates))
-        : [];
+    let teamIds: string[] = [];
+    if (phoneCandidates.length > 0) {
+      const membersSnap = await db.collection('teamMembers')
+        .where('phone', 'in', phoneCandidates)
+        .limit(10)
+        .get();
+      teamIds = membersSnap.docs.map((doc: any) => doc.data().teamId).filter(Boolean);
+    }
 
-    const leaderIds = leaderMatches.map((match) => match.id);
-    const teamIds = teamMatches.map((match) => match.teamId);
-    const filters = [];
+    const filters: Filter[] = [];
 
     if (leaderIds.length > 0) {
-      filters.push(inArray(registrations.userId, leaderIds));
+      filters.push(Filter.where('userId', 'in', leaderIds));
     }
 
     if (teamIds.length > 0) {
-      filters.push(inArray(registrations.teamId, teamIds));
+      filters.push(Filter.where('teamId', 'in', teamIds));
     }
 
     if (normalizedTransactionId.length >= 5) {
       filters.push(
-        inArray(registrations.transactionId, [trimmedQuery, normalizedTransactionId]),
+        Filter.where('transactionId', 'in', [trimmedQuery, normalizedTransactionId]),
       );
     }
 
@@ -68,23 +67,46 @@ export async function lookupStatus(query: string): Promise<StatusLookupResult> {
       return { error: 'No registrations found for this phone number or transaction ID.' };
     }
 
-    const results = await db
-      .select({
-        createdAt: registrations.createdAt,
-        eventName: eventsTable.name,
-        regId: registrations.id,
-        status: registrations.status,
-        teamName: registrations.teamName,
-        transactionId: registrations.transactionId,
-      })
-      .from(registrations)
-      .leftJoin(eventsTable, eq(registrations.eventId, eventsTable.id))
-      .where(filters.length === 1 ? filters[0] : or(...filters))
-      .orderBy(desc(registrations.createdAt));
+    const queryFilter = filters.length === 1 ? filters[0] : Filter.or(...filters);
+    const regSnap = await db.collection('registrations')
+      .where(queryFilter)
+      .get();
 
-    if (results.length === 0) {
+    const regDocs = regSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+
+    if (regDocs.length === 0) {
       return { error: 'No registrations found for this phone number or transaction ID.' };
     }
+
+    // Sort by createdAt descending
+    regDocs.sort((a: any, b: any) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const eventIds = Array.from(new Set(regDocs.map((reg: any) => reg.eventId).filter(Boolean)));
+    const eventsMap: Record<string, string> = {};
+
+    if (eventIds.length > 0) {
+      const eventSnaps = await Promise.all(
+        eventIds.map((id) => db.collection('events').doc(id as string).get())
+      );
+      eventSnaps.forEach((snap: any) => {
+        if (snap.exists) {
+          eventsMap[snap.id] = (snap.data() as any).name;
+        }
+      });
+    }
+
+    const results = regDocs.map((reg: any) => ({
+      createdAt: reg.createdAt ? new Date(reg.createdAt) : null,
+      eventName: eventsMap[reg.eventId] || 'Unknown Event',
+      regId: reg.id,
+      status: reg.status,
+      teamName: reg.teamName,
+      transactionId: reg.transactionId,
+    }));
 
     return { results };
   } catch (error) {

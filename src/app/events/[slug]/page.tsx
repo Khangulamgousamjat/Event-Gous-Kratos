@@ -4,8 +4,6 @@ import BrutalButton from '@/components/ui/BrutalButton';
 import BrutalCard from '@/components/ui/BrutalCard';
 
 import { db } from '@/db';
-import { events, systemSettings, scheduleSlots } from '@/db/schema';
-import { asc, eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { isRegistrationKillSwitchEnabled } from '@/lib/env';
 import { resolvePerParticipantFee } from '@/lib/registration';
@@ -13,8 +11,43 @@ import { resolvePerParticipantFee } from '@/lib/registration';
 export default async function EventDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  const [dbEvent] = await db.select().from(events).where(eq(events.slug, slug));
-  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
+  let dbEvent: any = null;
+  let settings: any = null;
+  let scheduleForEvent: any[] = [];
+
+  try {
+    const eventSnap = await db.collection('events').where('slug', '==', slug).limit(1).get();
+    if (eventSnap.empty) {
+      notFound();
+    }
+    dbEvent = { id: eventSnap.docs[0].id, ...eventSnap.docs[0].data() } as any;
+
+    try {
+      const settingsDoc = await db.collection('systemSettings').doc('1').get();
+      settings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
+    } catch (settingsErr) {
+      console.warn('Failed to load system settings in EventDetailPage:', settingsErr);
+    }
+
+    try {
+      const scheduleSnap = await db.collection('scheduleSlots')
+        .where('linkedEventId', '==', dbEvent.id)
+        .get();
+      scheduleForEvent = scheduleSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+      // Sort in-memory: day asc, sortIndex asc
+      scheduleForEvent.sort((a: any, b: any) => {
+        if (a.day !== b.day) {
+          return (a.day || 0) - (b.day || 0);
+        }
+        return (a.sortIndex || 0) - (b.sortIndex || 0);
+      });
+    } catch (scheduleErr) {
+      console.warn('Failed to load schedule slots in EventDetailPage:', scheduleErr);
+    }
+  } catch (error) {
+    console.error('Failed to load event details in EventDetailPage:', error);
+    notFound();
+  }
 
   if (!dbEvent) {
     notFound();
@@ -24,18 +57,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
   const deadline = settings?.deadline ?? null;
   const registrationOpen = settings?.registrationOpen ?? true;
   const isRegistrationClosed =
-    isRegistrationKillSwitchEnabled() || !registrationOpen || (deadline ? new Date() > deadline : false);
-
-  const scheduleForEvent = await db
-    .select()
-    .from(scheduleSlots)
-    .where(eq(scheduleSlots.linkedEventId, dbEvent.id))
-    .orderBy(asc(scheduleSlots.day), asc(scheduleSlots.sortIndex));
+    isRegistrationKillSwitchEnabled() || !registrationOpen || (deadline ? new Date(deadline) < new Date() : false);
 
   const scheduleText =
     scheduleForEvent.length > 0
       ? scheduleForEvent
-          .map((slot) => `D${slot.day} ${slot.timeSlot}${slot.venue ? ` @ ${slot.venue}` : ''}`)
+          .map((slot: any) => `D${slot.day} ${slot.timeSlot}${slot.venue ? ` @ ${slot.venue}` : ''}`)
           .join(' | ')
       : dbEvent.schedule || 'TBA';
 
@@ -55,7 +82,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
   };
 
   const deadlineText = deadline
-    ? deadline.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    ? new Date(deadline).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
     : 'Deadline not configured';
 
   return (

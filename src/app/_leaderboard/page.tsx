@@ -1,8 +1,6 @@
 import React from 'react';
 export const dynamic = 'force-dynamic';
 import { db } from '@/db';
-import { systemSettings, events, users } from '@/db/schema';
-import { eq, isNotNull, desc } from 'drizzle-orm';
 import BrutalCard from '@/components/ui/BrutalCard';
 import LiveViewerCounter from '@/components/marketing/LiveViewerCounter';
 import CountdownTimer from '@/components/marketing/CountdownTimer';
@@ -10,13 +8,12 @@ import { Trophy, Medal, Target, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default async function LeaderboardPage() {
-  const settings = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-  const currentSettings = settings.length > 0 ? settings[0] : null;
+  const settingsDoc = await db.collection('systemSettings').doc('1').get();
+  const currentSettings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
 
-  const revealTime = currentSettings?.resultsRevealTime;
+  const revealTime = currentSettings?.resultsRevealTime ? new Date(currentSettings.resultsRevealTime) : null;
   const videoUrl = currentSettings?.resultsVideoUrl;
   
-  // eslint-disable-next-line react-hooks/purity
   const isLocked = !revealTime || revealTime.getTime() > Date.now();
 
   if (isLocked) {
@@ -42,18 +39,32 @@ export default async function LeaderboardPage() {
   }
 
   // UNLOCKED STATE
-  const allEvents = await db.select().from(events).where(isNotNull(events.winners)).orderBy(desc(events.createdAt));
+  const eventsSnap = await db.collection('events').get();
+  const allEvents = eventsSnap.docs
+    .map((doc: any) => ({ id: doc.id, ...doc.data() } as any))
+    .filter((evt: any) => evt.winners != null);
+  
+  // Sort in-memory: createdAt desc
+  allEvents.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
   
   // Fetch Top Operatives (Gamification)
-  const topOperatives = await db.select({
-    name: users.name,
-    xp: users.xp,
-    level: users.level,
-    college: users.college
-  })
-  .from(users)
-  .orderBy(desc(users.xp))
-  .limit(10);
+  const usersSnap = await db.collection('users')
+    .orderBy('xp', 'desc')
+    .limit(10)
+    .get();
+  const topOperatives = usersSnap.docs.map((doc: any) => {
+    const data = doc.data() as any;
+    return {
+      name: data.name,
+      xp: data.xp,
+      level: data.level,
+      college: data.college,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-surface-container-low pb-24 border-b-4 border-on-surface">
@@ -80,132 +91,131 @@ export default async function LeaderboardPage() {
                 </div>
              )}
           </div>
-        </div>
+       </div>
 
-        {/* Global Operative Rankings (3D Podium) */}
-        <div className="max-w-[1440px] mx-auto px-6 mt-24">
-           <div className="mb-12 flex items-center justify-between border-b-4 border-on-surface pb-6">
-              <div>
-                 <h2 className="text-4xl font-black font-display uppercase italic tracking-tighter">Global Rankings</h2>
-                 <p className="text-xs font-bold uppercase text-primary tracking-widest mt-1">Direct Feed from the Tech Quest Matrix</p>
-              </div>
-              <div className="hidden md:flex gap-4">
-                 <div className="p-3 brutal-border bg-on-surface text-surface flex items-center gap-2">
-                    <Target className="w-5 h-5 text-primary-container" />
-                    <span className="text-xs font-bold uppercase italic">XP Real-time</span>
-                 </div>
-              </div>
-           </div>
+       {/* Global Operative Rankings (3D Podium) */}
+       <div className="max-w-[1440px] mx-auto px-6 mt-24">
+          <div className="mb-12 flex items-center justify-between border-b-4 border-on-surface pb-6">
+             <div>
+                <h2 className="text-4xl font-black font-display uppercase italic tracking-tighter">Global Rankings</h2>
+                <p className="text-xs font-bold uppercase text-primary tracking-widest mt-1">Direct Feed from the Tech Quest Matrix</p>
+             </div>
+             <div className="hidden md:flex gap-4">
+                <div className="p-3 brutal-border bg-on-surface text-surface flex items-center gap-2">
+                   <Target className="w-5 h-5 text-primary-container" />
+                   <span className="text-xs font-bold uppercase italic">XP Real-time</span>
+                </div>
+             </div>
+          </div>
 
-           {/* 3D Podium for Top 3 */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 items-end mb-16 pt-12" style={{ perspective: '1000px' }}>
-              {/* Silver (2nd) */}
-              {topOperatives[1] && (
-                 <motion.div 
-                   initial={{ opacity: 0, y: 50 }}
-                   whileInView={{ opacity: 1, y: 0 }}
-                   viewport={{ once: true }}
-                   transition={{ delay: 0.2 }}
-                   className="order-2 md:order-1 flex flex-col items-center"
-                 >
-                    <div className="mb-4 text-center">
-                       <p className="font-black text-xl uppercase truncate max-w-[200px]">{topOperatives[1].name}</p>
-                       <p className="text-[10px] uppercase font-bold opacity-60 bg-on-surface/5 px-2 py-0.5">{topOperatives[1].college}</p>
-                    </div>
-                    <div className="w-full h-40 brutal-border bg-on-surface text-surface flex flex-col items-center justify-center relative hard-shadow" style={{ transform: 'rotateY(-15deg)', transformStyle: 'preserve-3d' }}>
-                       <Medal className="w-12 h-12 text-slate-400 mb-2" />
-                       <span className="text-5xl font-black italic">2</span>
-                       <p className="text-[10px] font-bold uppercase tracking-widest mt-2">{topOperatives[1].xp} XP</p>
-                       {/* 3D Side */}
-                       <div className="absolute left-[-10px] top-0 w-[10px] h-full bg-on-surface/20 origin-right" style={{ transform: 'rotateY(-90deg)' }} />
-                    </div>
-                 </motion.div>
-              )}
+          {/* 3D Podium for Top 3 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 items-end mb-16 pt-12" style={{ perspective: '1000px' }}>
+             {/* Silver (2nd) */}
+             {topOperatives[1] && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.2 }}
+                  className="order-2 md:order-1 flex flex-col items-center"
+                >
+                   <div className="mb-4 text-center">
+                      <p className="font-black text-xl uppercase truncate max-w-[200px]">{topOperatives[1].name}</p>
+                      <p className="text-[10px] uppercase font-bold opacity-60 bg-on-surface/5 px-2 py-0.5">{topOperatives[1].college}</p>
+                   </div>
+                   <div className="w-full h-40 brutal-border bg-on-surface text-surface flex flex-col items-center justify-center relative hard-shadow" style={{ transform: 'rotateY(-15deg)', transformStyle: 'preserve-3d' }}>
+                      <Medal className="w-12 h-12 text-slate-400 mb-2" />
+                      <span className="text-5xl font-black italic">2</span>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mt-2">{topOperatives[1].xp} XP</p>
+                      {/* 3D Side */}
+                      <div className="absolute left-[-10px] top-0 w-[10px] h-full bg-on-surface/20 origin-right" style={{ transform: 'rotateY(-90deg)' }} />
+                   </div>
+                </motion.div>
+             )}
 
-              {/* Gold (1st) */}
-              {topOperatives[0] && (
-                 <motion.div 
-                   initial={{ opacity: 0, y: 50 }}
-                   whileInView={{ opacity: 1, y: 0 }}
-                   viewport={{ once: true }}
-                   className="order-1 md:order-2 flex flex-col items-center"
-                 >
-                    <div className="mb-6 text-center">
-                       <Trophy className="w-8 h-8 text-primary-container inline-block mb-2 animate-bounce" />
-                       <p className="font-black text-2xl uppercase truncate max-w-[250px]">{topOperatives[0].name}</p>
-                       <p className="text-[10px] uppercase font-bold opacity-80 bg-primary-container text-on-primary-container px-3 py-1 brutal-border inline-block mt-1">{topOperatives[0].college}</p>
-                    </div>
-                    <div className="w-full h-56 brutal-border bg-primary-container text-on-primary-container flex flex-col items-center justify-center relative hard-shadow-gold" style={{ transform: 'translateZ(20px)', transformStyle: 'preserve-3d' }}>
-                       <span className="text-7xl font-black italic">1</span>
-                       <p className="text-xs font-black uppercase tracking-widest mt-4 underline decoration-4 underline-offset-4">{topOperatives[0].xp} XP</p>
-                       <div className="mt-2 flex items-center gap-1 bg-on-primary-container text-primary-container px-2 py-0.5 text-[8px] font-black uppercase">
-                          <Zap className="w-3 h-3 fill-primary-container" /> ELITE OPERATIVE
-                       </div>
-                    </div>
-                 </motion.div>
-              )}
+             {/* Gold (1st) */}
+             {topOperatives[0] && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className="order-1 md:order-2 flex flex-col items-center"
+                >
+                   <div className="mb-6 text-center">
+                      <Trophy className="w-8 h-8 text-primary-container inline-block mb-2 animate-bounce" />
+                      <p className="font-black text-2xl uppercase truncate max-w-[250px]">{topOperatives[0].name}</p>
+                      <p className="text-[10px] uppercase font-bold opacity-80 bg-primary-container text-on-primary-container px-3 py-1 brutal-border inline-block mt-1">{topOperatives[0].college}</p>
+                   </div>
+                   <div className="w-full h-56 brutal-border bg-primary-container text-on-primary-container flex flex-col items-center justify-center relative hard-shadow-gold" style={{ transform: 'translateZ(20px)', transformStyle: 'preserve-3d' }}>
+                      <span className="text-7xl font-black italic">1</span>
+                      <p className="text-xs font-black uppercase tracking-widest mt-4 underline decoration-4 underline-offset-4">{topOperatives[0].xp} XP</p>
+                      <div className="mt-2 flex items-center gap-1 bg-on-primary-container text-primary-container px-2 py-0.5 text-[8px] font-black uppercase">
+                         <Zap className="w-3 h-3 fill-primary-container" /> ELITE OPERATIVE
+                      </div>
+                   </div>
+                </motion.div>
+             )}
 
-              {/* Bronze (3rd) */}
-              {topOperatives[2] && (
-                 <motion.div 
-                   initial={{ opacity: 0, y: 50 }}
-                   whileInView={{ opacity: 1, y: 0 }}
-                   viewport={{ once: true }}
-                   transition={{ delay: 0.4 }}
-                   className="order-3 md:order-3 flex flex-col items-center"
-                 >
-                    <div className="mb-4 text-center">
-                       <p className="font-black text-xl uppercase truncate max-w-[200px]">{topOperatives[2].name}</p>
-                       <p className="text-[10px] uppercase font-bold opacity-60 bg-on-surface/5 px-2 py-0.5">{topOperatives[2].college}</p>
-                    </div>
-                    <div className="w-full h-32 brutal-border bg-on-surface text-surface flex flex-col items-center justify-center relative hard-shadow" style={{ transform: 'rotateY(15deg)', transformStyle: 'preserve-3d' }}>
-                       <Medal className="w-10 h-10 text-orange-600 mb-2" />
-                       <span className="text-4xl font-black italic">3</span>
-                       <p className="text-[10px] font-bold uppercase tracking-widest mt-1">{topOperatives[2].xp} XP</p>
-                       {/* 3D Side */}
-                       <div className="absolute right-[-10px] top-0 w-[10px] h-full bg-on-surface/20 origin-left" style={{ transform: 'rotateY(90deg)' }} />
-                    </div>
-                 </motion.div>
-              )}
-           </div>
+             {/* Bronze (3rd) */}
+             {topOperatives[2] && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.4 }}
+                  className="order-3 md:order-3 flex flex-col items-center"
+                >
+                   <div className="mb-4 text-center">
+                      <p className="font-black text-xl uppercase truncate max-w-[200px]">{topOperatives[2].name}</p>
+                      <p className="text-[10px] uppercase font-bold opacity-60 bg-on-surface/5 px-2 py-0.5">{topOperatives[2].college}</p>
+                   </div>
+                   <div className="w-full h-32 brutal-border bg-on-surface text-surface flex flex-col items-center justify-center relative hard-shadow" style={{ transform: 'rotateY(15deg)', transformStyle: 'preserve-3d' }}>
+                      <Medal className="w-10 h-10 text-orange-600 mb-2" />
+                      <span className="text-4xl font-black italic">3</span>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mt-1">{topOperatives[2].xp} XP</p>
+                      {/* 3D Side */}
+                      <div className="absolute right-[-10px] top-0 w-[10px] h-full bg-on-surface/20 origin-left" style={{ transform: 'rotateY(90deg)' }} />
+                   </div>
+                </motion.div>
+             )}
+          </div>
 
-           {/* Remaining List */}
-           <div className="bg-surface brutal-border p-6 md:p-8 hard-shadow mb-24">
-              <div className="overflow-x-auto">
-                 <table className="w-full border-collapse font-sans min-w-[600px]">
-                    <thead>
-                       <tr className="border-b-2 border-on-surface text-left">
-                          <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40 text-center w-20">Rank</th>
-                          <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40">Operative</th>
-                          <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40 hidden md:table-cell">Institute</th>
-                          <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40 text-right w-40">XP Gained</th>
-                       </tr>
-                    </thead>
-                    <tbody className="divide-y-2 divide-on-surface/10">
-                       {topOperatives.slice(3).map((op, i) => (
-                          <tr key={i} className="hover:bg-surface-container-low transition-colors group">
-                             <td className="py-5 px-4 font-display font-black text-xl italic opacity-40 group-hover:opacity-100 group-hover:text-primary transition-all text-center">#{i + 4}</td>
-                             <td className="py-5 px-4">
-                                <p className="font-bold text-sm uppercase tracking-tight">{op.name}</p>
-                                <p className="text-[10px] font-bold uppercase opacity-60 md:hidden">{op.college}</p>
-                             </td>
-                             <td className="py-5 px-4 text-xs font-bold uppercase opacity-60 hidden md:table-cell">{op.college}</td>
-                             <td className="py-5 px-4 text-right">
-                                <div className="inline-flex items-center gap-2 bg-on-surface/5 px-4 py-1 brutal-border transition-all group-hover:bg-primary/10">
-                                   <Zap className="w-3 h-3 text-primary" />
-                                   <span className="font-mono font-black text-sm">{op.xp}</span>
-                                </div>
-                             </td>
-                          </tr>
-                       ))}
-                    </tbody>
-                 </table>
-              </div>
-           </div>
-        </div>
+          {/* Remaining List */}
+          <div className="bg-surface brutal-border p-6 md:p-8 hard-shadow mb-24">
+             <div className="overflow-x-auto">
+                <table className="w-full border-collapse font-sans min-w-[600px]">
+                   <thead>
+                      <tr className="border-b-2 border-on-surface text-left">
+                         <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40 text-center w-20">Rank</th>
+                         <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40">Operative</th>
+                         <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40 hidden md:table-cell">Institute</th>
+                         <th className="py-4 px-4 text-[10px] font-black uppercase opacity-40 text-right w-40">XP Gained</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y-2 divide-on-surface/10">
+                      {topOperatives.slice(3).map((op: any, i: number) => (
+                         <tr key={i} className="hover:bg-surface-container-low transition-colors group">
+                            <td className="py-5 px-4 font-display font-black text-xl italic opacity-40 group-hover:opacity-100 group-hover:text-primary transition-all text-center">#{i + 4}</td>
+                            <td className="py-5 px-4">
+                               <p className="font-bold text-sm uppercase tracking-tight">{op.name}</p>
+                               <p className="text-[10px] font-bold uppercase opacity-60 md:hidden">{op.college}</p>
+                            </td>
+                            <td className="py-5 px-4 text-xs font-bold uppercase opacity-60 hidden md:table-cell">{op.college}</td>
+                            <td className="py-5 px-4 text-right">
+                               <div className="inline-flex items-center gap-2 bg-on-surface/5 px-4 py-1 brutal-border transition-all group-hover:bg-primary/10">
+                                  <Zap className="w-3 h-3 text-primary" />
+                                  <span className="font-mono font-black text-sm">{op.xp}</span>
+                               </div>
+                            </td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+       </div>
 
-        {/* Results Matrix Grid */}
-
+       {/* Results Matrix Grid */}
        <div className="max-w-[1440px] mx-auto px-6 mt-24">
           <div className="mb-12">
              <h2 className="text-4xl font-black font-display uppercase italic tracking-tighter mb-4">Official Transmission Data</h2>
@@ -213,7 +223,7 @@ export default async function LeaderboardPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-             {allEvents.map((evt) => {
+             {allEvents.map((evt: any) => {
                 const winnersList = evt.winners as Array<{place: number, name: string, college: string}> || [];
                 // Sort by place
                 winnersList.sort((a,b) => a.place - b.place);
@@ -229,7 +239,7 @@ export default async function LeaderboardPage() {
                       </div>
                       
                       <div className="p-6 space-y-4 flex-grow divide-y-2 divide-on-surface/20">
-                         {winnersList.map((win, idx) => (
+                         {winnersList.map((win: any, idx: number) => (
                            <div key={idx} className="pt-4 first:pt-0 flex gap-4 items-center">
                               <span className={`font-display font-black text-4xl w-12 text-center text-on-surface/30`}>0{win.place}</span>
                               <div className="flex-1 overflow-hidden min-h-12 flex justify-center flex-col">

@@ -1,7 +1,5 @@
 import React from 'react';
 import { db } from '@/db';
-import { events } from '@/db/schema';
-import { desc } from 'drizzle-orm';
 import Link from 'next/link';
 import { requireAdminPageAccess } from '@/lib/authz';
 import EventManagementClient from '@/components/admin/EventManagementClient';
@@ -9,7 +7,20 @@ import EventManagementClient from '@/components/admin/EventManagementClient';
 export default async function EventManagementPage() {
   await requireAdminPageAccess();
 
-  const allEvents = await db.select().from(events).orderBy(desc(events.sortOrder), desc(events.createdAt));
+  const eventsSnap = await db.collection('events').get();
+  const allEvents = eventsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: sortOrder desc, then createdAt desc
+  allEvents.sort((a: any, b: any) => {
+    const sortOrderA = a.sortOrder || 0;
+    const sortOrderB = b.sortOrder || 0;
+    if (sortOrderA !== sortOrderB) {
+      return sortOrderB - sortOrderA;
+    }
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">

@@ -1,8 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { registrations, users, events, teamMembers, teams, systemSettings, organizers, scheduleSlots, squadPosts, teamMessages, galleryPhotos, announcements } from '@/db/schema';
-import { eq, and, inArray, or } from 'drizzle-orm';
+import { Filter, FieldPath } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
@@ -58,7 +57,9 @@ export async function createEvent(formData: FormData) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
 
   try {
-    await db.insert(events).values({
+    const docRef = db.collection('events').doc();
+    await docRef.set({
+      id: docRef.id,
       name,
       slug,
       tagline,
@@ -72,6 +73,7 @@ export async function createEvent(formData: FormData) {
       teamSizeMin,
       expectedParticipants,
       prizeDetails,
+      createdAt: new Date().toISOString(),
     });
     revalidatePath('/');
     revalidatePath('/admin/dashboard');
@@ -106,14 +108,16 @@ export async function registerUser(formData: FormData) {
   }
 
   try {
-    const existingUser = await db.select().from(users).where(eq(users.email, email));
-    if (existingUser.length > 0) {
+    const existingUserSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (!existingUserSnap.empty) {
       return { error: 'Email already registered.' };
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await db.insert(users).values({
+    const docRef = db.collection('users').doc();
+    await docRef.set({
+      id: docRef.id,
       name,
       email,
       password: hashedPassword,
@@ -123,6 +127,7 @@ export async function registerUser(formData: FormData) {
       role: 'PARTICIPANT',
       xp: 50, // Welcome Bonus
       level: 1,
+      createdAt: new Date().toISOString(),
     });
 
     return { success: true };
@@ -176,18 +181,21 @@ export async function registerAdmin(formData: FormData) {
   }
 
   try {
-    const existingUser = await db.select().from(users).where(eq(users.email, email));
-    if (existingUser.length > 0) {
+    const existingUserSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (!existingUserSnap.empty) {
       return { error: 'This email is already registered.' };
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await db.insert(users).values({
+    const docRef = db.collection('users').doc();
+    await docRef.set({
+      id: docRef.id,
       name,
       email,
       password: hashedPassword,
       role: requestedRole,
+      createdAt: new Date().toISOString(),
     });
 
     return { success: true };
@@ -208,14 +216,23 @@ export async function updateAnnouncement(formData: FormData) {
   const isActive = formData.get('isActive') === 'on';
 
   try {
-    const existing = await db.select().from(announcements).limit(1);
+    const announcementsSnap = await db.collection('announcements').limit(1).get();
     
-    if (existing.length > 0) {
-      await db.update(announcements)
-        .set({ content, isActive, updatedAt: new Date() })
-        .where(eq(announcements.id, existing[0].id));
+    if (!announcementsSnap.empty) {
+      const doc = announcementsSnap.docs[0];
+      await db.collection('announcements').doc(doc.id).update({
+        content,
+        isActive,
+        updatedAt: new Date().toISOString(),
+      });
     } else {
-      await db.insert(announcements).values({ content, isActive });
+      const docRef = db.collection('announcements').doc();
+      await docRef.set({
+        id: docRef.id,
+        content,
+        isActive,
+        updatedAt: new Date().toISOString(),
+      });
     }
     
     revalidatePath('/');
@@ -233,12 +250,17 @@ export async function updateSchedules(formData: FormData) {
   try {
     const entries = Array.from(formData.entries());
     
+    const batch = db.batch();
+    let hasUpdates = false;
     for (const [id, schedule] of entries) {
       if (id.startsWith('$ACTION')) continue;
       
-      await db.update(events)
-        .set({ schedule: schedule as string })
-        .where(eq(events.id, id));
+      const docRef = db.collection('events').doc(id);
+      batch.update(docRef, { schedule: schedule as string });
+      hasUpdates = true;
+    }
+    if (hasUpdates) {
+      await batch.commit();
     }
     
     revalidatePath('/');
@@ -269,33 +291,33 @@ export async function updateScheduleSlots(formData: FormData) {
         const venueRaw = formData.get(`day${day}_venue_${slot.sortIndex}`) as string | null;
         const venue = venueRaw && venueRaw.trim().length > 0 ? venueRaw.trim() : null;
 
-        const existing = await db
-          .select()
-          .from(scheduleSlots)
-          .where(
-            and(
-              eq(scheduleSlots.day, day),
-              eq(scheduleSlots.sortIndex, slot.sortIndex),
-            ),
-          )
-          .limit(1);
+        const existingSnap = await db
+          .collection('scheduleSlots')
+          .where('day', '==', day)
+          .where('sortIndex', '==', slot.sortIndex)
+          .limit(1)
+          .get();
 
-        if (existing.length === 0) {
-          await db.insert(scheduleSlots).values({
+        if (existingSnap.empty) {
+          const docRef = db.collection('scheduleSlots').doc();
+          await docRef.set({
+            id: docRef.id,
             day,
             sortIndex: slot.sortIndex,
             timeSlot: slot.timeSlot,
             venue,
             linkedEventId: isBreak ? null : linkedEventId,
             isBreak,
+            createdAt: new Date().toISOString(),
           });
         } else {
-          await db.update(scheduleSlots).set({
+          const existingDoc = existingSnap.docs[0];
+          await db.collection('scheduleSlots').doc(existingDoc.id).update({
             timeSlot: slot.timeSlot,
             venue,
             linkedEventId: isBreak ? null : linkedEventId,
             isBreak,
-          }).where(eq(scheduleSlots.id, existing[0].id));
+          });
         }
       }
     }
@@ -313,8 +335,11 @@ export async function deleteEvent(formData: FormData) {
 
   const id = formData.get('id') as string;
   try {
-    await db.delete(registrations).where(eq(registrations.eventId, id));
-    await db.delete(events).where(eq(events.id, id));
+    const regsSnap = await db.collection('registrations').where('eventId', '==', id).get();
+    const batch = db.batch();
+    regsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+    batch.delete(db.collection('events').doc(id));
+    await batch.commit();
     revalidatePath('/');
     revalidatePath('/admin/events');
     revalidatePath('/admin/dashboard');
@@ -362,25 +387,22 @@ export async function updateEvent(formData: FormData) {
   }
 
   try {
-    await db
-      .update(events)
-      .set({
-        name,
-        tagline,
-        description,
-        category,
-        venue,
-        format,
-        isCommon,
-        prizeDetails,
-        fee,
-        teamSize,
-        teamSizeMin,
-        expectedParticipants,
-        sortOrder: parseInt(formData.get('sortOrder') as string) || 0,
-        schedule: formData.get('schedule') as string || null,
-      })
-      .where(eq(events.id, id));
+    await db.collection('events').doc(id).update({
+      name,
+      tagline,
+      description,
+      category,
+      venue,
+      format,
+      isCommon,
+      prizeDetails,
+      fee,
+      teamSize,
+      teamSizeMin,
+      expectedParticipants,
+      sortOrder: parseInt(formData.get('sortOrder') as string) || 0,
+      schedule: formData.get('schedule') as string || null,
+    });
 
     revalidatePath('/');
     revalidatePath('/admin/events');
@@ -397,8 +419,11 @@ export async function deleteUser(formData: FormData) {
 
   const id = formData.get('id') as string;
   try {
-    await db.delete(registrations).where(eq(registrations.userId, id));
-    await db.delete(users).where(eq(users.id, id));
+    const regsSnap = await db.collection('registrations').where('userId', '==', id).get();
+    const batch = db.batch();
+    regsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+    batch.delete(db.collection('users').doc(id));
+    await batch.commit();
     revalidatePath('/admin/users');
   } catch(e) { console.error(e); }
 }
@@ -416,7 +441,7 @@ export async function updateUser(formData: FormData) {
   const roleRaw = (formData.get('role') as string) || 'PARTICIPANT';
   const role = roleRaw === 'ADMIN' || roleRaw === 'VOLUNTEER' || roleRaw === 'PARTICIPANT' ? roleRaw : 'PARTICIPANT';
   try {
-    await db.update(users).set({ name, college, branch, year, phone, role }).where(eq(users.id, id));
+    await db.collection('users').doc(id).update({ name, college, branch, year, phone, role });
     revalidatePath('/admin/users');
   } catch (e) { console.error(e); }
 }
@@ -436,7 +461,10 @@ export async function completeProfile(formData: FormData) {
   }
 
   try {
-    await db.update(users).set({ college, branch, year, phone }).where(eq(users.email, email));
+    const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (!userSnap.empty) {
+      await db.collection('users').doc(userSnap.docs[0].id).update({ college, branch, year, phone });
+    }
     revalidatePath('/dashboard');
   } catch (e) {
     console.error(e);
@@ -483,8 +511,9 @@ export async function createRegistration(formData: FormData) {
   const session = await auth();
   if (!session?.user?.email) return { error: 'Unauthorized Protocol.' };
 
-  const [dbUser] = await db.select().from(users).where(eq(users.email, session.user.email));
-  if (!dbUser) return { error: 'Identity not found in global registry.' };
+  const userSnap = await db.collection('users').where('email', '==', session.user.email).limit(1).get();
+  if (userSnap.empty) return { error: 'Identity not found in global registry.' };
+  const dbUser = { id: userSnap.docs[0].id, ...userSnap.docs[0].data() } as any;
 
   try {
     assertRateLimit({
@@ -502,15 +531,17 @@ export async function createRegistration(formData: FormData) {
   }
 
   try {
-    const feeSettings = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-    const feePerPerson = feeSettings.length > 0 && feeSettings[0].feePerPerson ? feeSettings[0].feePerPerson : 0;
-    const isPaused = feeSettings.length > 0 && feeSettings[0].registrationPaused;
+    const feeSettingsDoc = await db.collection('systemSettings').doc('1').get();
+    const feeSettings = feeSettingsDoc.exists ? feeSettingsDoc.data() : null;
+    const feePerPerson = feeSettings?.feePerPerson ? feeSettings.feePerPerson : 0;
+    const isPaused = feeSettings?.registrationPaused;
     if (isPaused) {
       return { error: 'Registrations are temporarily closed due to technical maintenance' };
     }
 
-    const [event] = await db.select().from(events).where(eq(events.id, eventId));
-    if (!event) return { error: 'Event not found.' };
+    const eventSnap = await db.collection('events').doc(eventId).get();
+    if (!eventSnap.exists) return { error: 'Event not found.' };
+    const event = { id: eventSnap.id, ...eventSnap.data() } as any;
 
     const allMembers = [
       {
@@ -545,49 +576,60 @@ export async function createRegistration(formData: FormData) {
     }
 
     // Check existing registration
-    const existing = await db.select().from(registrations).where(and(eq(registrations.eventId, eventId), eq(registrations.userId, dbUser.id)));
+    const existingSnap = await db.collection('registrations')
+      .where('eventId', '==', eventId)
+      .where('userId', '==', dbUser.id)
+      .get();
+    const existing = existingSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
     
     if (existing.length > 0) {
       if (existing[0].status === 'REJECTED') {
         // OVERWRITE PROTOCOL: Delete the rejected packet so they can retry smoothly.
         const existingTeamId = existing[0].teamId;
-        await db.delete(registrations).where(eq(registrations.id, existing[0].id));
+        
+        const batch = db.batch();
+        batch.delete(db.collection('registrations').doc(existing[0].id));
         if (existingTeamId) {
-          await db.delete(teamMembers).where(eq(teamMembers.teamId, existingTeamId as string));
-          await db.delete(teams).where(eq(teams.id, existingTeamId as string));
+          const membersSnap = await db.collection('teamMembers').where('teamId', '==', existingTeamId).get();
+          membersSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+          batch.delete(db.collection('teams').doc(existingTeamId));
         }
+        await batch.commit();
       } else {
         return { error: 'You have already deployed a packet for this event.' };
       }
     }
 
-    const [insertedTeam] = await db
-      .insert(teams)
-      .values({ eventId, name: resolvedTeamName })
-      .returning({ id: teams.id });
-
-    if (!insertedTeam) {
-      throw new Error('Failed to create team record');
-    }
+    const teamRef = await db.collection('teams').add({
+      eventId,
+      name: resolvedTeamName,
+      createdAt: new Date().toISOString(),
+    });
+    const insertedTeam = { id: teamRef.id };
 
     if (additionalMembers.length > 0) {
-      await db.insert(teamMembers).values(
-        additionalMembers.map((m) => ({
+      const batch = db.batch();
+      additionalMembers.forEach((m) => {
+        const memberRef = db.collection('teamMembers').doc();
+        batch.set(memberRef, {
           teamId: insertedTeam.id,
           name: m.name,
           college: m.college,
           branch: m.branch,
           year: m.year ?? null,
           phone: m.phone,
-        })),
-      );
+        });
+      });
+      await batch.commit();
     }
 
     // Persist legacy JSON `members` for backward compatibility with existing admin UI.
     const legacyAdditionalMembers =
       additionalMembers.length > 0 ? additionalMembers.map((m) => ({ name: m.name, phone: m.phone })) : null;
 
-    await db.insert(registrations).values({
+    const regRef = db.collection('registrations').doc();
+    await regRef.set({
+      id: regRef.id,
       userId: dbUser.id,
       eventId,
       teamId: insertedTeam.id,
@@ -598,6 +640,7 @@ export async function createRegistration(formData: FormData) {
       paymentNotes,
       totalFee,
       status: requiresPayment ? 'PENDING' : 'APPROVED',
+      createdAt: new Date().toISOString(),
     });
 
     // Award XP for deployment
@@ -651,11 +694,12 @@ export async function createWalkInRegistration(formData: FormData) {
     .filter((member) => member.name);
 
   try {
-    const [event] = await db.select().from(events).where(eq(events.id, eventId));
+    const eventSnap = await db.collection('events').doc(eventId).get();
 
-    if (!event) {
+    if (!eventSnap.exists) {
       return { error: 'Selected event was not found.' };
     }
+    const event = { id: eventSnap.id, ...eventSnap.data() } as any;
 
     const memberCount = 1 + additionalMembers.length;
     const minTeamSize = event.teamSizeMin ?? 1;
@@ -668,79 +712,89 @@ export async function createWalkInRegistration(formData: FormData) {
     const normalizedEmail =
       emailInput || `walkin-${phone.replace(/[^\d]/g, '') || Date.now()}@kratos.local`;
 
-    const [existingUser] = await db
-      .select()
-      .from(users)
-      .where(or(eq(users.email, normalizedEmail), eq(users.phone, phone.trim())))
-      .limit(1);
+    const existingUserSnap = await db.collection('users')
+      .where(
+        Filter.or(
+          Filter.where('email', '==', normalizedEmail),
+          Filter.where('phone', '==', phone.trim())
+        )
+      )
+      .limit(1)
+      .get();
+    const existingUser = existingUserSnap.empty ? null : { id: existingUserSnap.docs[0].id, ...existingUserSnap.docs[0].data() } as any;
 
-    const userRecord =
-      existingUser ??
-      (
-        await db
-          .insert(users)
-          .values({
-            name: name.trim(),
-            email: normalizedEmail,
-            phone: phone.trim(),
-            college,
-            branch,
-            year,
-            role: 'PARTICIPANT',
-            xp: 0,
-            level: 1,
-          })
-          .returning()
-      )[0];
+    let userRecord: any;
+    if (existingUser) {
+      userRecord = existingUser;
+    } else {
+      const userRef = db.collection('users').doc();
+      const userData = {
+        id: userRef.id,
+        name: name.trim(),
+        email: normalizedEmail,
+        phone: phone.trim(),
+        college,
+        branch,
+        year,
+        role: 'PARTICIPANT',
+        xp: 0,
+        level: 1,
+        createdAt: new Date().toISOString(),
+      };
+      await userRef.set(userData);
+      userRecord = userData;
+    }
 
     if (!userRecord) {
       return { error: 'Unable to create the walk-in participant record.' };
     }
 
-    await db
-      .update(users)
-      .set({
-        name: userRecord.name || name.trim(),
-        phone: userRecord.phone || phone.trim(),
-        college: userRecord.college || college,
-        branch: userRecord.branch || branch,
-        year: userRecord.year || year,
-      })
-      .where(eq(users.id, userRecord.id));
+    await db.collection('users').doc(userRecord.id).update({
+      name: userRecord.name || name.trim(),
+      phone: userRecord.phone || phone.trim(),
+      college: userRecord.college || college,
+      branch: userRecord.branch || branch,
+      year: userRecord.year || year,
+    });
 
-    const [existingRegistration] = await db
-      .select({ id: registrations.id })
-      .from(registrations)
-      .where(and(eq(registrations.userId, userRecord.id), eq(registrations.eventId, eventId)))
-      .limit(1);
+    const existingRegistrationSnap = await db.collection('registrations')
+      .where('userId', '==', userRecord.id)
+      .where('eventId', '==', eventId)
+      .limit(1)
+      .get();
 
-    if (existingRegistration) {
+    if (!existingRegistrationSnap.empty) {
       return { error: 'This participant is already registered for the selected event.' };
     }
 
     const resolvedTeamName =
       teamNameInput || (memberCount > 1 ? `${name.trim()} Desk Team` : `${name.trim()} Solo Entry`);
 
-    const [insertedTeam] = await db
-      .insert(teams)
-      .values({ eventId, name: resolvedTeamName })
-      .returning({ id: teams.id });
+    const teamRef = await db.collection('teams').add({
+      eventId,
+      name: resolvedTeamName,
+      createdAt: new Date().toISOString(),
+    });
+    const insertedTeam = { id: teamRef.id };
 
     if (!insertedTeam) {
       return { error: 'Unable to create the walk-in team record.' };
     }
 
     if (additionalMembers.length > 0) {
-      await db.insert(teamMembers).values(
-        additionalMembers.map((member) => ({
+      const batch = db.batch();
+      additionalMembers.forEach((member) => {
+        const memberRef = db.collection('teamMembers').doc();
+        batch.set(memberRef, {
           teamId: insertedTeam.id,
           name: member.name,
           phone: member.phone || null,
           college,
           branch,
           year,
-        })),
-      );
+        });
+      });
+      await batch.commit();
     }
 
     const totalFee = (event.fee || 0) * memberCount;
@@ -748,23 +802,24 @@ export async function createWalkInRegistration(formData: FormData) {
       .filter(Boolean)
       .join(' | ');
 
-    const [registration] = await db
-      .insert(registrations)
-      .values({
-        userId: userRecord.id,
-        eventId,
-        teamId: insertedTeam.id,
-        teamName: resolvedTeamName,
-        members:
-          additionalMembers.length > 0
-            ? additionalMembers.map((member) => ({ name: member.name, phone: member.phone || null }))
-            : null,
-        transactionId: totalFee > 0 ? `DESK-${paymentMode}-${Date.now()}` : null,
-        paymentNotes,
-        totalFee,
-        status: 'APPROVED',
-      })
-      .returning({ id: registrations.id });
+    const regRef = db.collection('registrations').doc();
+    await regRef.set({
+      id: regRef.id,
+      userId: userRecord.id,
+      eventId,
+      teamId: insertedTeam.id,
+      teamName: resolvedTeamName,
+      members:
+        additionalMembers.length > 0
+          ? additionalMembers.map((member) => ({ name: member.name, phone: member.phone || null }))
+          : null,
+      transactionId: totalFee > 0 ? `DESK-${paymentMode}-${Date.now()}` : null,
+      paymentNotes,
+      totalFee,
+      status: 'APPROVED',
+      createdAt: new Date().toISOString(),
+    });
+    const registration = { id: regRef.id };
 
     revalidatePath('/admin/desk');
     revalidatePath('/admin/registrations');
@@ -818,26 +873,41 @@ export async function sendOperationalNotification(formData: FormData) {
     let recipients: Array<{ email: string | null; phone: string | null }> = [];
 
     if (audience === 'ALL_USERS') {
-      recipients = await db
-        .select({ email: users.email, phone: users.phone })
-        .from(users)
-        .where(eq(users.role, 'PARTICIPANT'));
+      const usersSnap = await db.collection('users').where('role', '==', 'PARTICIPANT').get();
+      recipients = usersSnap.docs.map((doc: any) => {
+        const data = doc.data();
+        return { email: data.email ?? null, phone: data.phone ?? null };
+      });
     } else if (audience === 'EVENT') {
       if (!eventId) {
         return { error: 'Choose an event when targeting event participants.' };
       }
 
-      recipients = await db
-        .select({ email: users.email, phone: users.phone })
-        .from(registrations)
-        .innerJoin(users, eq(registrations.userId, users.id))
-        .where(eq(registrations.eventId, eventId));
+      const regsSnap = await db.collection('registrations').where('eventId', '==', eventId).get();
+      const userIds = Array.from(new Set(regsSnap.docs.map((doc: any) => doc.data().userId).filter(Boolean)));
+      const usersList: any[] = [];
+      if (userIds.length > 0) {
+        const chunkSize = 30;
+        for (let i = 0; i < userIds.length; i += chunkSize) {
+          const chunk = userIds.slice(i, i + chunkSize);
+          const usersSnap = await db.collection('users').where(FieldPath.documentId(), 'in', chunk).get();
+          usersSnap.docs.forEach((doc: any) => usersList.push(doc.data()));
+        }
+      }
+      recipients = usersList.map(user => ({ email: user.email ?? null, phone: user.phone ?? null }));
     } else {
-      recipients = await db
-        .select({ email: users.email, phone: users.phone })
-        .from(registrations)
-        .innerJoin(users, eq(registrations.userId, users.id))
-        .where(eq(registrations.status, 'APPROVED'));
+      const regsSnap = await db.collection('registrations').where('status', '==', 'APPROVED').get();
+      const userIds = Array.from(new Set(regsSnap.docs.map((doc: any) => doc.data().userId).filter(Boolean)));
+      const usersList: any[] = [];
+      if (userIds.length > 0) {
+        const chunkSize = 30;
+        for (let i = 0; i < userIds.length; i += chunkSize) {
+          const chunk = userIds.slice(i, i + chunkSize);
+          const usersSnap = await db.collection('users').where(FieldPath.documentId(), 'in', chunk).get();
+          usersSnap.docs.forEach((doc: any) => usersList.push(doc.data()));
+        }
+      }
+      recipients = usersList.map(user => ({ email: user.email ?? null, phone: user.phone ?? null }));
     }
 
     if (recipients.length === 0) {
@@ -877,7 +947,7 @@ export async function updateRegistrationStatus(formData: FormData) {
   const status = formData.get('status') as 'PENDING' | 'APPROVED' | 'REJECTED';
   const paymentNotes = (formData.get('paymentNotes') as string) || null;
   try {
-    await db.update(registrations).set({ status, paymentNotes }).where(eq(registrations.id, id));
+    await db.collection('registrations').doc(id).update({ status, paymentNotes });
     revalidatePath('/admin/dashboard');
     revalidatePath('/admin/registrations');
     revalidatePath(`/admin/verify/${id}`);
@@ -897,9 +967,11 @@ export async function bulkUpdateRegistrationStatus(ids: string[], status: 'APPRO
   }
 
   try {
-    await db.update(registrations)
-      .set({ status })
-      .where(inArray(registrations.id, ids));
+    const batch = db.batch();
+    ids.forEach((id) => {
+      batch.update(db.collection('registrations').doc(id), { status });
+    });
+    await batch.commit();
 
     revalidatePath('/admin/registrations');
     revalidatePath('/admin/dashboard');
@@ -920,17 +992,28 @@ export async function bulkDeleteRegistrations(ids: string[]) {
 
   try {
     for (const id of ids) {
-      const existing = await db.select().from(registrations).where(eq(registrations.id, id));
-      if (existing.length === 0) continue;
+      const existingDoc = await db.collection('registrations').doc(id).get();
+      if (!existingDoc.exists) continue;
+      const existing = existingDoc.data() as any;
 
-      const existingTeamId = existing[0].teamId;
-      await db.delete(teamMessages).where(eq(teamMessages.registrationId, id));
-      await db.delete(registrations).where(eq(registrations.id, id));
+      const existingTeamId = existing.teamId;
+      
+      const batch = db.batch();
+      
+      // Delete team messages
+      const msgsSnap = await db.collection('teamMessages').where('registrationId', '==', id).get();
+      msgsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+      
+      // Delete registration itself
+      batch.delete(db.collection('registrations').doc(id));
 
       if (existingTeamId) {
-        await db.delete(teamMembers).where(eq(teamMembers.teamId, existingTeamId as string));
-        await db.delete(teams).where(eq(teams.id, existingTeamId as string));
+        const membersSnap = await db.collection('teamMembers').where('teamId', '==', existingTeamId).get();
+        membersSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+        batch.delete(db.collection('teams').doc(existingTeamId));
       }
+      
+      await batch.commit();
     }
 
     revalidatePath('/admin/registrations');
@@ -946,9 +1029,6 @@ export async function deleteRegistration(id: string) {
   return bulkDeleteRegistrations([id]);
 }
 
-
-
-
 export async function updateGalleryLock(isGalleryLocked: boolean) {
   try {
     await assertAdminAction();
@@ -957,12 +1037,7 @@ export async function updateGalleryLock(isGalleryLocked: boolean) {
   }
 
   try {
-    const existing = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-    if (existing.length === 0) {
-      await db.insert(systemSettings).values({ id: 1, isGalleryLocked });
-    } else {
-      await db.update(systemSettings).set({ isGalleryLocked }).where(eq(systemSettings.id, 1));
-    }
+    await db.collection('systemSettings').doc('1').set({ id: 1, isGalleryLocked }, { merge: true });
     revalidatePath('/admin/dashboard');
     revalidatePath('/dashboard');
     revalidatePath('/gallery');
@@ -982,12 +1057,7 @@ export async function updateSystemImage(field: 'heroImage' | 'aboutImage1' | 'ab
   }
 
   try {
-    const existing = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-    if (existing.length === 0) {
-      await db.insert(systemSettings).values({ id: 1, [field]: imageUrl });
-    } else {
-      await db.update(systemSettings).set({ [field]: imageUrl }).where(eq(systemSettings.id, 1));
-    }
+    await db.collection('systemSettings').doc('1').set({ id: 1, [field]: imageUrl }, { merge: true });
     revalidatePath('/admin/settings');
     revalidatePath('/');
     return { success: true };
@@ -1001,23 +1071,28 @@ export async function uploadGalleryPhoto(imageUrl: string) {
   const session = await auth();
   if (!session?.user?.email) return { error: 'Unauthorized sequence.' };
 
-  const [dbUser] = await db.select().from(users).where(eq(users.email, session.user.email));
-  if (!dbUser) return { error: 'Identity fragmented.' };
+  const userSnap = await db.collection('users').where('email', '==', session.user.email).limit(1).get();
+  if (userSnap.empty) return { error: 'Identity fragmented.' };
+  const dbUser = { id: userSnap.docs[0].id, ...userSnap.docs[0].data() } as any;
 
-  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
+  const settingsDoc = await db.collection('systemSettings').doc('1').get();
+  const settings = settingsDoc.exists ? settingsDoc.data() : null;
   if (settings && settings.isGalleryLocked) {
     return { error: 'Admin has locked the Gallery.' };
   }
 
-  const existingPhotos = await db.select().from(galleryPhotos).where(eq(galleryPhotos.userId, dbUser.id));
-  if (existingPhotos.length >= 4) {
+  const existingPhotosSnap = await db.collection('galleryPhotos').where('userId', '==', dbUser.id).get();
+  if (existingPhotosSnap.size >= 4) {
     return { error: 'Maximum optical capacity reached (4 photos limit).' };
   }
 
   try {
-    await db.insert(galleryPhotos).values({
+    const docRef = db.collection('galleryPhotos').doc();
+    await docRef.set({
+      id: docRef.id,
       userId: dbUser.id,
       imageUrl,
+      createdAt: new Date().toISOString(),
     });
     revalidatePath('/dashboard');
     revalidatePath('/gallery');
@@ -1032,12 +1107,16 @@ export async function deleteGalleryPhoto(id: string) {
   const session = await auth();
   if (!session?.user?.email) return { error: 'Unauthorized sequence.' };
 
-  const [dbUser] = await db.select().from(users).where(eq(users.email, session.user.email));
-  if (!dbUser) return { error: 'Identity fragmented.' };
+  const userSnap = await db.collection('users').where('email', '==', session.user.email).limit(1).get();
+  if (userSnap.empty) return { error: 'Identity fragmented.' };
+  const dbUser = { id: userSnap.docs[0].id, ...userSnap.docs[0].data() } as any;
 
   try {
     // Safety check - Can only delete if user owns the photo
-    await db.delete(galleryPhotos).where(and(eq(galleryPhotos.id, id), eq(galleryPhotos.userId, dbUser.id)));
+    const photoDoc = await db.collection('galleryPhotos').doc(id).get();
+    if (photoDoc.exists && photoDoc.data()?.userId === dbUser.id) {
+      await db.collection('galleryPhotos').doc(id).delete();
+    }
     revalidatePath('/dashboard');
     revalidatePath('/gallery');
     return { success: true };
@@ -1057,21 +1136,14 @@ export async function updateResultsSettings(formData: FormData) {
   const revealTimeStr = formData.get('revealTime') as string;
   const videoUrl = formData.get('videoUrl') as string;
   
-  const revealTime = revealTimeStr ? new Date(revealTimeStr) : null;
+  const revealTime = revealTimeStr ? new Date(revealTimeStr).toISOString() : null;
 
   try {
-    const existing = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-    if (existing.length === 0) {
-      await db.insert(systemSettings).values({ 
-        id: 1, 
-        resultsRevealTime: revealTime, 
-        resultsVideoUrl: videoUrl 
-      });
-    } else {
-      await db.update(systemSettings)
-        .set({ resultsRevealTime: revealTime, resultsVideoUrl: videoUrl })
-        .where(eq(systemSettings.id, 1));
-    }
+    await db.collection('systemSettings').doc('1').set({ 
+      id: 1, 
+      resultsRevealTime: revealTime, 
+      resultsVideoUrl: videoUrl 
+    }, { merge: true });
     revalidatePath('/admin/results');
     revalidatePath('/leaderboard');
     return { success: true };
@@ -1095,34 +1167,22 @@ export async function updateRegistrationSettings(formData: FormData) {
   const feePerPersonRaw = formData.get('feePerPerson') as string;
   const feePerPerson = feePerPersonRaw ? parseInt(feePerPersonRaw) : 0;
   const deadlineRaw = (formData.get('deadline') as string) || '';
-  const deadline = deadlineRaw ? new Date(deadlineRaw) : null;
+  const deadline = deadlineRaw ? new Date(deadlineRaw).toISOString() : null;
 
   if (Number.isNaN(feePerPerson) || feePerPerson < 0) {
     return { error: 'Fee per person must be zero or greater.' };
   }
 
   try {
-    const existing = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-    if (existing.length === 0) {
-      await db.insert(systemSettings).values({
-        id: 1,
-        isSiteLocked,
-        registrationOpen,
-        registrationPaused,
-        upiId,
-        feePerPerson,
-        deadline,
-      });
-    } else {
-      await db.update(systemSettings).set({
-        isSiteLocked,
-        registrationOpen,
-        registrationPaused,
-        upiId,
-        feePerPerson,
-        deadline,
-      }).where(eq(systemSettings.id, 1));
-    }
+    await db.collection('systemSettings').doc('1').set({
+      id: 1,
+      isSiteLocked,
+      registrationOpen,
+      registrationPaused,
+      upiId,
+      feePerPerson,
+      deadline,
+    }, { merge: true });
 
     revalidatePath('/admin/dashboard');
     revalidatePath('/admin/settings');
@@ -1151,7 +1211,9 @@ export async function createOrganizer(formData: FormData) {
   }
 
   try {
-    await db.insert(organizers).values({
+    const docRef = db.collection('organizers').doc();
+    await docRef.set({
+      id: docRef.id,
       organizerName: organizerName.trim(),
       role: role ? role.trim() : null,
       contact: contact ? contact.trim() : null,
@@ -1161,6 +1223,7 @@ export async function createOrganizer(formData: FormData) {
       linkedin: linkedin ? linkedin.trim() : null,
       instagram: instagram ? instagram.trim() : null,
       sortOrder,
+      createdAt: new Date().toISOString(),
     });
     revalidatePath('/admin/organizers');
     revalidatePath('/organizers');
@@ -1189,7 +1252,7 @@ export async function updateOrganizer(formData: FormData) {
   }
 
   try {
-    await db.update(organizers).set({
+    await db.collection('organizers').doc(id).update({
       organizerName: organizerName.trim(),
       role: role ? role.trim() : null,
       contact: contact ? contact.trim() : null,
@@ -1199,7 +1262,7 @@ export async function updateOrganizer(formData: FormData) {
       linkedin: linkedin ? linkedin.trim() : null,
       instagram: instagram ? instagram.trim() : null,
       sortOrder,
-    }).where(eq(organizers.id, id));
+    });
     revalidatePath('/admin/organizers');
     revalidatePath('/organizers');
   } catch (error) {
@@ -1212,13 +1275,14 @@ export async function deleteOrganizer(formData: FormData) {
 
   const id = formData.get('id') as string;
   try {
-    await db.delete(organizers).where(eq(organizers.id, id));
+    await db.collection('organizers').doc(id).delete();
     revalidatePath('/admin/organizers');
     revalidatePath('/organizers');
   } catch (error) {
     console.error(error);
   }
 }
+
 export async function updateEventWinners(eventId: string, winners: unknown) {
   try {
     await assertAdminAction();
@@ -1227,7 +1291,7 @@ export async function updateEventWinners(eventId: string, winners: unknown) {
   }
 
   try {
-    await db.update(events).set({ winners }).where(eq(events.id, eventId));
+    await db.collection('events').doc(eventId).update({ winners });
     revalidatePath('/admin/results');
     revalidatePath('/leaderboard');
     return { success: true };
@@ -1245,10 +1309,13 @@ export async function createSquadPost(formData: FormData) {
   if (!session?.user?.id) return { error: 'Unauthorized sequence.' };
 
   try {
-    await db.insert(squadPosts).values({
+    const docRef = db.collection('squadPosts').doc();
+    await docRef.set({
+      id: docRef.id,
       userId: session.user.id,
       eventId,
       bio,
+      createdAt: new Date().toISOString(),
     });
     revalidatePath('/squads');
     return { success: true };
@@ -1263,7 +1330,10 @@ export async function deleteSquadPost(postId: string) {
   if (!session?.user?.id) return { error: 'Unauthorized sequence.' };
 
   try {
-    await db.delete(squadPosts).where(and(eq(squadPosts.id, postId), eq(squadPosts.userId, session.user.id)));
+    const postDoc = await db.collection('squadPosts').doc(postId).get();
+    if (postDoc.exists && postDoc.data()?.userId === session.user.id) {
+      await db.collection('squadPosts').doc(postId).delete();
+    }
     revalidatePath('/squads');
     return { success: true };
   } catch (error) {
@@ -1278,13 +1348,16 @@ export async function sendTeamMessage(registrationId: string, content: string) {
 
   try {
     // Verify membership
-    const [reg] = await db.select().from(registrations).where(eq(registrations.id, registrationId));
-    if (!reg) return { error: 'Team event not found.' };
+    const regDoc = await db.collection('registrations').doc(registrationId).get();
+    if (!regDoc.exists) return { error: 'Team event not found.' };
 
-    await db.insert(teamMessages).values({
+    const docRef = db.collection('teamMessages').doc();
+    await docRef.set({
+      id: docRef.id,
       registrationId,
       senderId: session.user.id,
       content,
+      createdAt: new Date().toISOString(),
     });
     
     return { success: true };
@@ -1293,4 +1366,3 @@ export async function sendTeamMessage(registrationId: string, content: string) {
     return { error: 'Failed to transmit team messages.' };
   }
 }
-

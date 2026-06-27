@@ -1,6 +1,4 @@
 import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 
 /**
  * Progression Constants
@@ -31,18 +29,17 @@ export function getPlayerRank(xp: number) {
  * @param amount XP amount to award
  */
 export async function awardXP(userId: string, amount: number) {
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
-  if (!user) return;
+  const userDoc = await db.collection('users').doc(userId).get();
+  if (!userDoc.exists) return;
+  const user = userDoc.data() as any;
 
   const newXp = (user.xp || 0) + amount;
   const newLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
 
-  await db.update(users)
-    .set({ 
-      xp: newXp,
-      level: newLevel
-    })
-    .where(eq(users.id, userId));
+  await db.collection('users').doc(userId).update({ 
+    xp: newXp,
+    level: newLevel
+  });
     
   return { xp: newXp, level: newLevel };
 }

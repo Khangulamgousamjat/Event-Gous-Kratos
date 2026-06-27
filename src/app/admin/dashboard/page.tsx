@@ -5,9 +5,7 @@ import BrutalButton from '@/components/ui/BrutalButton';
 import CreateEventForm from '@/components/admin/CreateEventForm';
 import LogoutButton from '@/components/dashboard/LogoutButton';
 import { db } from '@/db';
-import { registrations, users, events, teamMembers } from '@/db/schema';
 import { isRegistrationKillSwitchEnabled } from '@/lib/env';
-import { eq, desc, count, sum } from 'drizzle-orm';
 import { requireAdminPageAccess } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
@@ -23,57 +21,63 @@ const StatCard = ({ label, value, trend }: { label: string; value: string; trend
 export default async function AdminDashboard() {
   await requireAdminPageAccess();
 
-  const [approvedRegistrationsCount] = await db
-    .select({ value: count() })
-    .from(registrations)
-    .where(eq(registrations.status, 'APPROVED'));
+  // Fetch approved registrations
+  const approvedRegsSnap = await db.collection('registrations').where('status', '==', 'APPROVED').get();
+  const approvedRegs = approvedRegsSnap.docs.map((doc: any) => doc.data());
+  const approvedRegistrationsCountValue = approvedRegs.length;
 
-  const [additionalParticipantsCount] = await db
-    .select({ value: count() })
-    .from(teamMembers)
-    .innerJoin(registrations, eq(teamMembers.teamId, registrations.teamId))
-    .where(eq(registrations.status, 'APPROVED'));
+  // Revenue estimate
+  const revenueTotal = approvedRegs.reduce((sum: number, reg: any) => sum + (reg.totalFee || 0), 0);
 
-  const totalParticipants = approvedRegistrationsCount.value + additionalParticipantsCount.value;
+  // Fetch additional team members count for approved registrations
+  const membersSnap = await db.collection('teamMembers').get();
+  const approvedTeamIds = new Set(approvedRegs.map((reg: any) => reg.teamId).filter(Boolean));
+  const additionalParticipantsCountValue = membersSnap.docs.filter((doc: any) => approvedTeamIds.has(doc.data().teamId)).length;
 
-  const [pendingPaymentsCount] = await db
-    .select({ value: count() })
-    .from(registrations)
-    .where(eq(registrations.status, 'PENDING'));
+  const totalParticipants = approvedRegistrationsCountValue + additionalParticipantsCountValue;
 
-  const [revTotal] = await db
-    .select({ value: sum(registrations.totalFee) })
-    .from(registrations)
-    .where(eq(registrations.status, 'APPROVED'));
+  // Pending payments count
+  const pendingCountSnap = await db.collection('registrations').where('status', '==', 'PENDING').count().get();
+  const pendingPaymentsCountValue = pendingCountSnap.data().count;
 
-  // Count ALL user accounts (including those with no registrations)
-  const { users: usersTable } = await import('@/db/schema');
-  const [totalAccountsRow] = await db.select({ value: count() }).from(usersTable);
-  const totalAccounts = totalAccountsRow?.value ?? 0;
+  // Total Accounts count
+  const usersCountSnap = await db.collection('users').count().get();
+  const totalAccounts = usersCountSnap.data().count;
 
   const stats = [
     { label: 'Registered Accounts', value: totalAccounts.toString(), href: '/admin/users' },
     { label: 'Approved Participants', value: totalParticipants.toString() },
-    { label: 'Approved Registrations', value: approvedRegistrationsCount.value.toString() },
-    { label: 'Pending Registrations', value: pendingPaymentsCount.value.toString() },
-    { label: 'Revenue Estimate', value: `INR ${revTotal.value || 0}` },
+    { label: 'Approved Registrations', value: approvedRegistrationsCountValue.toString() },
+    { label: 'Pending Registrations', value: pendingPaymentsCountValue.toString() },
+    { label: 'Revenue Estimate', value: `INR ${revenueTotal}` },
   ];
 
   const killSwitchEnabled = isRegistrationKillSwitchEnabled();
 
-  const recentRegistrations = await db.select({
-    id: registrations.id,
-    name: users.name,
-    event: events.name,
-    fee: events.fee,
-    amount: registrations.totalFee,
-    status: registrations.status,
-  })
-    .from(registrations)
-    .innerJoin(users, eq(registrations.userId, users.id))
-    .innerJoin(events, eq(registrations.eventId, events.id))
-    .orderBy(desc(registrations.createdAt))
-    .limit(5);
+  // Recent Registrations (Fetch registrations sorted desc)
+  const regsSnap = await db.collection('registrations').get();
+  const regs = regsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  regs.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+  const recentRegs = regs.slice(0, 5);
+
+  const recentRegistrations = await Promise.all(recentRegs.map(async (reg: any) => {
+    const userDoc = await db.collection('users').doc(reg.userId).get();
+    const eventDoc = await db.collection('events').doc(reg.eventId).get();
+    const userData = userDoc.exists ? userDoc.data() : null;
+    const eventData = eventDoc.exists ? eventDoc.data() : null;
+    return {
+      id: reg.id,
+      name: userData?.name || 'Unknown User',
+      event: eventData?.name || 'Unknown Event',
+      fee: eventData?.fee || 0,
+      amount: reg.totalFee,
+      status: reg.status,
+    };
+  }));
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">
@@ -122,17 +126,15 @@ export default async function AdminDashboard() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left font-sans">
-                <thead className="bg-surface-container-low border-b-2 border-on-surface text-[10px] font-black uppercase tracking-widest">
-                  <tr>
-                    <th className="p-4">Participant</th>
-                    <th className="p-4">Event</th>
-                    <th className="p-4">Fee Paid</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Action</th>
-                  </tr>
-                </thead>
                 <tbody className="divide-y-2 divide-on-surface/10">
-                  {recentRegistrations.map((registration) => (
+                  <tr className="bg-surface-container-low border-b-2 border-on-surface text-[10px] font-black uppercase tracking-widest">
+                    <td className="p-4">Participant</td>
+                    <td className="p-4">Event</td>
+                    <td className="p-4">Fee Paid</td>
+                    <td className="p-4">Status</td>
+                    <td className="p-4">Action</td>
+                  </tr>
+                  {recentRegistrations.map((registration: any) => (
                     <tr key={registration.id} className="hover:bg-primary-container/5 transition-colors">
                       <td className="p-4 font-bold uppercase text-sm w-1/3 truncate max-w-[150px]">{registration.name}</td>
                       <td className="p-4 text-xs font-bold opacity-60 uppercase w-1/4 truncate max-w-[120px]">{registration.event}</td>

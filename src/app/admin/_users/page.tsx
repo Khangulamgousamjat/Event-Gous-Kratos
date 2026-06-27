@@ -1,8 +1,6 @@
 import React from 'react';
 export const dynamic = 'force-dynamic';
 import { db } from '@/db';
-import { users, registrations } from '@/db/schema';
-import { desc, count } from 'drizzle-orm';
 import Link from 'next/link';
 import { updateUser, deleteUser } from '@/lib/actions';
 import UsersClientWrapper, { type User } from '@/components/admin/UsersClientWrapper';
@@ -11,27 +9,34 @@ import { requireAdminPageAccess } from '@/lib/authz';
 export default async function UserManagementPage() {
   await requireAdminPageAccess();
 
-  const allUsersRaw = await db
-    .select()
-    .from(users)
-    .orderBy(desc(users.createdAt));
+  const usersSnap = await db.collection('users').get();
+  const allUsersRaw = usersSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: createdAt desc
+  allUsersRaw.sort((a: any, b: any) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
-  const regCounts = await db
-    .select({ userId: registrations.userId, count: count() })
-    .from(registrations)
-    .groupBy(registrations.userId);
+  const regsSnap = await db.collection('registrations').get();
+  const regCountMap = new Map<string, number>();
+  regsSnap.docs.forEach((doc: any) => {
+    const userId = doc.data().userId;
+    if (userId) {
+      regCountMap.set(userId, (regCountMap.get(userId) || 0) + 1);
+    }
+  });
 
-  const regCountMap = new Map(regCounts.map((r) => [r.userId, r.count]));
-
-  const allUsers: User[] = allUsersRaw.map((u) => ({
+  const allUsers: User[] = allUsersRaw.map((u: any) => ({
     ...u,
     registrationCount: regCountMap.get(u.id) ?? 0,
   }));
 
   const totalUsers = allUsers.length;
-  const admins = allUsers.filter((u) => u.role === 'ADMIN').length;
-  const noRegistrations = allUsers.filter((u) => u.registrationCount === 0).length;
-  const withRegistrations = allUsers.filter((u) => u.registrationCount > 0).length;
+  const admins = allUsers.filter((u: any) => u.role === 'ADMIN').length;
+  const noRegistrations = allUsers.filter((u: any) => u.registrationCount === 0).length;
+  const withRegistrations = allUsers.filter((u: any) => u.registrationCount > 0).length;
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-12">
@@ -71,7 +76,6 @@ export default async function UserManagementPage() {
           </div>
         ))}
       </div>
-
       <UsersClientWrapper users={allUsers} updateUser={updateUser} deleteUser={deleteUser} />
     </div>
   );

@@ -1,25 +1,50 @@
 import React from 'react';
 import { db } from '@/db';
-import { events as eventsTable, systemSettings } from '@/db/schema';
-import { desc, eq } from 'drizzle-orm';
 import EventsClientFilter from './EventsClientFilter';
 import { isRegistrationKillSwitchEnabled } from '@/lib/env';
 import { resolvePerParticipantFee } from '@/lib/registration';
 
 const EventsGrid = async () => {
-  const dbEvents = await db.select().from(eventsTable).orderBy(desc(eventsTable.sortOrder), desc(eventsTable.createdAt));
+  let resolvedEvents: any[] = [];
+  let settings: any = null;
 
-  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
-  const resolvedEvents = dbEvents.map((event) => ({
-    ...event,
-    fee: resolvePerParticipantFee(event.fee, settings?.feePerPerson),
-  }));
+  try {
+    const eventsSnap = await db.collection('events').get();
+    const dbEvents = eventsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+    
+    // Sort in-memory: sortOrder desc, then createdAt desc
+    dbEvents.sort((a: any, b: any) => {
+      const sortOrderA = a.sortOrder || 0;
+      const sortOrderB = b.sortOrder || 0;
+      if (sortOrderA !== sortOrderB) {
+        return sortOrderB - sortOrderA;
+      }
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    try {
+      const settingsDoc = await db.collection('systemSettings').doc('1').get();
+      settings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
+    } catch (err) {
+      console.warn('Failed to load system settings from Firestore in EventsGrid:', err);
+    }
+
+    resolvedEvents = dbEvents.map((event: any) => ({
+      ...event,
+      fee: resolvePerParticipantFee(event.fee, settings?.feePerPerson),
+    }));
+  } catch (error) {
+    console.warn('Failed to load events from Firestore in EventsGrid:', error);
+  }
+
   const registrationOpen = settings?.registrationOpen ?? true;
   const deadline = settings?.deadline ?? null;
   const now = new Date();
 
   const isKilled = isRegistrationKillSwitchEnabled();
-  let isRegistrationClosed = !!(!registrationOpen || (deadline && now > deadline));
+  let isRegistrationClosed = !!(!registrationOpen || (deadline && now > new Date(deadline)));
 
   if (isKilled) {
     isRegistrationClosed = true;

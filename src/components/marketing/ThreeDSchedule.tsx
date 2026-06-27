@@ -1,7 +1,5 @@
 import React from 'react';
 import { db } from '@/db';
-import { eq } from 'drizzle-orm';
-import { events, scheduleSlots } from '@/db/schema';
 import ThreeDScheduleClient from './ThreeDScheduleClient';
 
 export const dynamic = 'force-dynamic';
@@ -15,22 +13,38 @@ export default async function ThreeDSchedule() {
     { sortIndex: 5, time: '04:00 PM - 05:30 PM', day1: 'Wrap-up and qualifiers', day2: 'Prize Distribution' },
   ];
 
-  const scheduleRows = await db
-    .select({
-      day: scheduleSlots.day,
-      sortIndex: scheduleSlots.sortIndex,
-      timeSlot: scheduleSlots.timeSlot,
-      venue: scheduleSlots.venue,
-      isBreak: scheduleSlots.isBreak,
-      linkedEventName: events.name,
-    })
-    .from(scheduleSlots)
-    .leftJoin(events, eq(scheduleSlots.linkedEventId, events.id));
+  const slotsSnap = await db.collection('scheduleSlots').get();
+  const rawSlots = slotsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+
+  const eventIds = Array.from(new Set(rawSlots.map((s: any) => s.linkedEventId).filter(Boolean)));
+  const eventsMap: Record<string, any> = {};
+  if (eventIds.length > 0) {
+    const eventSnaps = await Promise.all(
+      eventIds.map((eid: any) => db.collection('events').doc(eid).get())
+    );
+    eventSnaps.forEach((snap: any) => {
+      if (snap.exists) {
+        eventsMap[snap.id] = snap.data();
+      }
+    });
+  }
+
+  const scheduleRows = rawSlots.map((slot: any) => {
+    const event = eventsMap[slot.linkedEventId] || {};
+    return {
+      day: slot.day,
+      sortIndex: slot.sortIndex,
+      timeSlot: slot.timeSlot,
+      venue: slot.venue,
+      isBreak: slot.isBreak,
+      linkedEventName: event.name || null,
+    };
+  });
 
   if (!scheduleRows || scheduleRows.length === 0) {
     return (
       <ThreeDScheduleClient
-        scheduleData={slotDefs.map((slot) => ({
+        scheduleData={slotDefs.map((slot: any) => ({
           time: slot.time,
           day1: slot.day1,
           day2: slot.day2,
@@ -42,12 +56,12 @@ export default async function ThreeDSchedule() {
     );
   }
 
-  const byKey = new Map<string, (typeof scheduleRows)[number]>();
+  const byKey = new Map<string, any>();
   for (const row of scheduleRows) {
     byKey.set(`${row.day}-${row.sortIndex}`, row);
   }
 
-  const scheduleData = slotDefs.map((slot) => {
+  const scheduleData = slotDefs.map((slot: any) => {
     const day1Row = byKey.get(`1-${slot.sortIndex}`);
     const day2Row = byKey.get(`2-${slot.sortIndex}`);
     const isBreak = slot.sortIndex === 3;

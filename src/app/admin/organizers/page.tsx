@@ -1,8 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { db } from '@/db';
-import { organizers } from '@/db/schema';
-import { asc } from 'drizzle-orm';
 import { requireAdminPageAccess } from '@/lib/authz';
 import AdminOrganizersClient from '@/components/admin/AdminOrganizersClient';
 
@@ -11,10 +9,20 @@ export const dynamic = 'force-dynamic';
 export default async function AdminOrganizersPage() {
   await requireAdminPageAccess();
 
-  const allOrganizers = await db
-    .select()
-    .from(organizers)
-    .orderBy(asc(organizers.sortOrder), asc(organizers.createdAt));
+  const organizersSnap = await db.collection('organizers').get();
+  const allOrganizers = organizersSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any));
+  
+  // Sort in-memory: sortOrder asc, then createdAt asc
+  allOrganizers.sort((a: any, b: any) => {
+    const sortOrderA = a.sortOrder || 0;
+    const sortOrderB = b.sortOrder || 0;
+    if (sortOrderA !== sortOrderB) {
+      return sortOrderA - sortOrderB;
+    }
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateA - dateB;
+  });
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">
