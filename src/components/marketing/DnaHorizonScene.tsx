@@ -174,17 +174,17 @@ function DNAHelix({ organizers, onSelect, activeOrg, isMobile }: any) {
                   style={{
                     background: 'rgba(0,15,30,0.7)',
                     backdropFilter: 'blur(10px)',
-                    border: `1px solid ${node.organizerName.toLowerCase().includes('rahil') ? '#ffd700' : node.organizerName.toLowerCase().includes('pranav') ? '#ff00ff' : GLOW_COLOR + '44'}`,
+                    border: `1px solid ${node.organizerName.toLowerCase().includes('gulamgous') ? '#ffd700' : GLOW_COLOR + '44'}`,
                     borderRadius: '8px',
                     padding: '4px 12px',
-                    color: node.organizerName.toLowerCase().includes('rahil') ? '#ffd700' : node.organizerName.toLowerCase().includes('pranav') ? '#ff00ff' : GLOW_COLOR,
+                    color: node.organizerName.toLowerCase().includes('gulamgous') ? '#ffd700' : GLOW_COLOR,
                     fontSize: '11px',
                     fontWeight: 900,
                     textTransform: 'uppercase',
                     letterSpacing: '2px',
                     whiteSpace: 'nowrap',
                     pointerEvents: 'none',
-                    boxShadow: `0 0 20px ${node.organizerName.toLowerCase().includes('rahil') ? '#ffd70044' : node.organizerName.toLowerCase().includes('pranav') ? '#ff00ff44' : GLOW_COLOR + '22'}`,
+                    boxShadow: `0 0 20px ${node.organizerName.toLowerCase().includes('gulamgous') ? '#ffd70044' : GLOW_COLOR + '22'}`,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px'
@@ -192,11 +192,8 @@ function DNAHelix({ organizers, onSelect, activeOrg, isMobile }: any) {
                 >
                   <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }} />
                   {node.organizerName}
-                  {node.organizerName.toLowerCase().includes('rahil') && (
-                    <span style={{ fontSize: '9px', opacity: 0.8, background: '#ffd700', color: '#000', padding: '1px 6px', borderRadius: '4px', marginLeft: '4px' }}>FRONTEND</span>
-                  )}
-                  {node.organizerName.toLowerCase().includes('pranav') && (
-                    <span style={{ fontSize: '9px', opacity: 0.8, background: '#ff00ff', color: '#fff', padding: '1px 6px', borderRadius: '4px', marginLeft: '4px' }}>BACKEND</span>
+                  {node.organizerName.toLowerCase().includes('gulamgous') && (
+                    <span style={{ fontSize: '9px', opacity: 0.8, background: '#ffd700', color: '#000', padding: '1px 6px', borderRadius: '4px', marginLeft: '4px' }}>DEV</span>
                   )}
                 </motion.div>
               </Html>
@@ -302,20 +299,12 @@ export default function PostCreditsCinematic({ organizers }: { organizers: any[]
         instagramUrl: 'https://www.instagram.com/by.sayaliii_?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw=='
       },
       {
-        id: 'rahil',
-        organizerName: 'Rahil Hussain',
-        role: 'Frontend Lead',
-        description: 'Crafting the immersive technical interfaces of the multiverse.',
+        id: 'gulamgous',
+        organizerName: 'Gulamgous Khan',
+        role: 'Full Stack Developer',
+        description: 'Crafting the immersive technical interfaces and backend systems of the multiverse.',
         imageUrl: '/images/organizers/dummy-0.png',
-        instagramUrl: 'https://www.instagram.com/ifeelrahiii/?utm_source=ig_web_button_share_sheet'
-      },
-      {
-        id: 'pranav',
-        organizerName: 'Pranav Birhade',
-        role: 'Backend Architect',
-        description: 'Ensuring absolute database integrity and high-speed performance.',
-        imageUrl: '/images/organizers/dummy-1.png',
-        instagramUrl: 'https://www.instagram.com/pranav.404error/?__pwa=1#'
+        instagramUrl: 'https://www.instagram.com/khn.vibes?igsh=MXkwZGIxeHQwZzBnNA=='
       },
       {
         id: 'aashish',
@@ -505,7 +494,7 @@ export default function PostCreditsCinematic({ organizers }: { organizers: any[]
                 }}
               />
               {/* Conditional Neon Badges */}
-              {activeOrg.organizerName.toLowerCase().includes('rahil') && (
+              {activeOrg.organizerName.toLowerCase().includes('gulamgous') && (
                 <div style={{
                   position: 'absolute',
                   top: '10px',
@@ -518,22 +507,7 @@ export default function PostCreditsCinematic({ organizers }: { organizers: any[]
                   fontWeight: 900,
                   boxShadow: '0 0 15px #00ffff',
                   letterSpacing: '1px'
-                }}>FRONTEND</div>
-              )}
-              {activeOrg.organizerName.toLowerCase().includes('pranav') && (
-                <div style={{
-                  position: 'absolute',
-                  top: '10px',
-                  left: '10px',
-                  background: '#ff00ff',
-                  color: '#fff',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontSize: '9px',
-                  fontWeight: 900,
-                  boxShadow: '0 0 15px #ff00ff',
-                  letterSpacing: '1px'
-                }}>BACKEND</div>
+                }}>DEV</div>
               )}
             </motion.div>
 

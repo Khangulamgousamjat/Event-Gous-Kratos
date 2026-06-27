@@ -156,30 +156,29 @@ const OrganizersSection = () => {
 
             <div className="space-y-8">
               <div>
-                <h3 className="text-lg font-black uppercase leading-none">RAHIL HUSSAIN</h3>
+                <h3 className="text-lg font-black uppercase leading-none">GULAMGOUS KHAN</h3>
                 <p className="text-[10px] font-bold opacity-50 uppercase tracking-widest mt-1">FULL STACK DEVELOPER</p>
                 <a
-                  href="https://www.instagram.com/ifeelrahiii?igsh=dzNqMWZlcWloMzh4"
+                  href="https://www.instagram.com/khn.vibes?igsh=MXkwZGIxeHQwZzBnNA=="
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 text-[10px] font-mono opacity-70 mt-3 hover:opacity-100 hover:text-[#D4AF37] transition-all lowercase"
                 >
                   <InstagramIcon />
-                  <span>@ifeelrahiii</span>
+                  <span>@khn.vibes</span>
                 </a>
-              </div>
-
-              <div className="pt-6 border-t border-on-surface/10">
-                <h3 className="text-lg font-black uppercase leading-none">PRANAV BIRHADE</h3>
-                <p className="text-[10px] font-bold opacity-50 uppercase tracking-widest mt-1">FULL STACK DEVELOPER</p>
                 <a
-                  href="https://www.instagram.com/pranav.404error/"
+                  href="https://www.linkedin.com/in/gulamgous"
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1.5 text-[10px] font-mono opacity-70 mt-3 hover:opacity-100 hover:text-[#D4AF37] transition-all lowercase"
+                  className="flex items-center gap-1.5 text-[10px] font-mono opacity-70 mt-2 hover:opacity-100 hover:text-[#D4AF37] transition-all lowercase"
                 >
-                  <InstagramIcon />
-                  <span>@pranav.404error</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/>
+                    <rect width="4" height="12" x="2" y="9"/>
+                    <circle cx="4" cy="4" r="2"/>
+                  </svg>
+                  <span>gulamgous</span>
                 </a>
               </div>
             </div>

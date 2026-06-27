@@ -165,7 +165,7 @@ export default function RegistrationClientForm({
           {eventData.requiresPayment ? (
             <div className="w-48 h-48 bg-white p-2 border-2 border-on-surface flex items-center justify-center relative overflow-hidden">
               <BrutalQRCode
-                data={`upi://pay?pa=${encodeURIComponent(eventData.upiId)}&pn=${encodeURIComponent('SHAIKH RAHIL HUSAIN SHAUKAT HUSSAIN')}&cu=INR&am=${totalFee}`}
+                data={`upi://pay?pa=${encodeURIComponent(eventData.upiId)}&pn=${encodeURIComponent('GULAMGOUS KHAN')}&cu=INR&am=${totalFee}`}
                 size={160}
                 className="w-full h-full"
               />
@@ -183,7 +183,7 @@ export default function RegistrationClientForm({
                   <p className="text-[10px] font-display font-bold uppercase tracking-widest opacity-60">Official UPI ID</p>
                   <p className="text-2xl font-black tracking-tighter uppercase">{eventData.upiId}</p>
                   <p className="text-[10px] font-bold uppercase text-primary mt-1">
-                    A/C: SHAIKH RAHIL HUSAIN SHAUKAT HUSSAIN
+                    A/C: GULAMGOUS KHAN
                   </p>
                 </div>
                 <div className="flex-1 space-y-4">

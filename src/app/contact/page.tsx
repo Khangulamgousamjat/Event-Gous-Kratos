@@ -32,8 +32,8 @@ export default function ContactPage() {
             </span>
             <h2 className="text-3xl font-black uppercase mb-6 tracking-tight">EMAIL</h2>
             <div className="space-y-2">
-              <a href="mailto:kratos2k26.mpgi@gmail.com" className="text-xl font-bold hover:text-[#D4AF37] transition-colors block">
-                kratos2k26.mpgi@gmail.com
+              <a href="mailto:gousk2004@gmail.com" className="text-xl font-bold hover:text-[#D4AF37] transition-colors block">
+                gousk2004@gmail.com
               </a>
               <a href="https://mpgi.ac.in/school-of-engineering/" target="_blank" rel="noreferrer" className="text-base font-bold opacity-60 hover:opacity-100 hover:text-[#D4AF37] transition-all block">
                 School of Engineering Page
@@ -48,8 +48,8 @@ export default function ContactPage() {
             </span>
             <h2 className="text-3xl font-black uppercase mb-6 tracking-tight">PHONE</h2>
             <div className="space-y-4">
-              <a href="tel:+919834147160" className="text-xl font-bold hover:text-[#D4AF37] transition-colors block">
-                +91 9834147160
+              <a href="tel:+918625076618" className="text-xl font-bold hover:text-[#D4AF37] transition-colors block">
+                +91 8625076618
               </a>
               <p className="text-sm font-bold opacity-60 leading-relaxed uppercase">
                 Matoshri Pratishthan Group of Institutions, <br />
@@ -84,9 +84,9 @@ export default function ContactPage() {
 
               <div className="pt-4 border-t border-on-surface/10">
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37] mb-1">FULL STACK DEVELOPER</p>
-                <p className="text-lg font-black uppercase leading-none">Rahil Hussain</p>
+                <p className="text-lg font-black uppercase leading-none">Gulamgous Khan</p>
                 <a
-                  href="https://www.instagram.com/ifeelrahiii?igsh=dzNqMWZlcWloMzh4"
+                  href="https://www.instagram.com/khn.vibes?igsh=MXkwZGIxeHQwZzBnNA=="
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 text-xs font-mono opacity-70 mt-1 hover:opacity-100 hover:text-[#D4AF37] transition-all lowercase"
@@ -106,35 +106,20 @@ export default function ContactPage() {
                     <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
                     <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
                   </svg>
-                  <span>ifeelrahiii</span>
+                  <span>khn.vibes</span>
                 </a>
-              </div>
-
-              <div className="pt-4 border-t border-on-surface/10">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37] mb-1">FULL STACK DEVELOPER</p>
-                <p className="text-lg font-black uppercase leading-none">Pranav Birhade</p>
                 <a
-                  href="https://www.instagram.com/pranav.404error/"
+                  href="https://www.linkedin.com/in/gulamgous"
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 text-xs font-mono opacity-70 mt-1 hover:opacity-100 hover:text-[#D4AF37] transition-all lowercase"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/>
+                    <rect width="4" height="12" x="2" y="9"/>
+                    <circle cx="4" cy="4" r="2"/>
                   </svg>
-                  <span>pranav.404error</span>
+                  <span>gulamgous</span>
                 </a>
               </div>
             </div>

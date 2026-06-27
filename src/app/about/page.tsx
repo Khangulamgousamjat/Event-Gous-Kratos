@@ -16,8 +16,7 @@ const TEAM_DATA = {
     { name: 'Final Student Core Team Pending Approval', role: 'Student Department', year: 'Roster Updates Soon' },
   ],
   developers: [
-    { name: 'Rahil Hussain', role: 'Frontend Developer', LinkedIn: 'https://www.linkedin.com/in/shaikh-rahil-hussain-a54348291' },
-    { name: 'Pranav Birhade', role: 'Backend Developer', github: 'https://github.com/PRANAVBIRHADE' },
+    { name: 'Gulamgous Khan', role: 'Full Stack Developer', LinkedIn: 'https://www.linkedin.com/in/gulamgous', instagram: 'https://www.instagram.com/khn.vibes?igsh=MXkwZGIxeHQwZzBnNA==' },
   ]
 };
 

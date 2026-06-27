@@ -27,8 +27,8 @@ const Footer = () => {
             CONTACT
           </p>
           <div className="space-y-3 font-sans text-sm font-bold">
-            <p className="hover:text-primary transition-colors cursor-pointer">+91 9834147160</p>
-            <p className="hover:text-primary transition-colors cursor-pointer underline decoration-1 underline-offset-4">kratos2k26.mpgi@gmail.com</p>
+            <p className="hover:text-primary transition-colors cursor-pointer">+91 8625076618</p>
+            <p className="hover:text-primary transition-colors cursor-pointer underline decoration-1 underline-offset-4">gousk2004@gmail.com</p>
             <Link href="/contact" className="hover:text-primary transition-colors">
               Contact Page
             </Link>
@@ -43,8 +43,8 @@ const Footer = () => {
           <nav className="flex flex-col gap-3 font-sans text-sm font-bold">
             <Link href="https://mpgi.ac.in/" className="hover:text-primary transition-colors">Official Website</Link>
             <Link href="https://mpgi.ac.in/school-of-engineering/" className="hover:text-primary transition-colors">School of Engineering</Link>
-            <Link href="mailto:kratos2k26.mpgi@gmail.com" className="hover:text-primary transition-colors">Email</Link>
-            <Link href="tel:+919834147160" className="hover:text-primary transition-colors">Call</Link>
+            <Link href="mailto:gousk2004@gmail.com" className="hover:text-primary transition-colors">Email</Link>
+            <Link href="tel:+918625076618" className="hover:text-primary transition-colors">Call</Link>
             <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
             <Link href="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
           </nav>
