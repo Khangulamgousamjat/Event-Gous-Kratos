@@ -16,7 +16,7 @@ const TEAM_DATA = {
     { name: 'Final Student Core Team Pending Approval', role: 'Student Department', year: 'Roster Updates Soon' },
   ],
   developers: [
-    { name: 'Gulamgous Khan', role: 'Full Stack Developer', LinkedIn: 'https://www.linkedin.com/in/gulamgous', instagram: 'https://www.instagram.com/khn.vibes?igsh=MXkwZGIxeHQwZzBnNA==' },
+    { name: 'Gulamgous Khan', role: 'Full Stack Developer', LinkedIn: 'https://www.linkedin.com/in/gulamgous', instagram: 'https://www.instagram.com/khn.vibes?igsh=MXkwZGIxeHQwZzBnNA==', github: 'https://github.com/Khangulamgousamjat' },
   ]
 };
 
@@ -139,13 +139,29 @@ export default function AboutPage() {
                 <div className="relative bg-surface p-5 md:p-8 border-4 border-on-surface">
                   <h3 className="text-2xl md:text-4xl font-black uppercase tracking-tighter text-on-surface mb-2">{dev.name}</h3>
                   <p className="font-display font-bold text-primary italic uppercase tracking-widest text-sm md:text-lg mb-4 md:mb-6">{dev.role}</p>
-                  {(dev.LinkedIn ?? dev.github) && (
-                    <Link href={(dev.LinkedIn ?? dev.github)!}>
-                      <BrutalButton size="sm" variant="outline" className="w-full md:w-auto">
-                        View Protocol
-                      </BrutalButton>
-                    </Link>
-                  )}
+                  <div className="flex flex-col gap-2">
+                    {dev.LinkedIn && (
+                      <Link href={dev.LinkedIn} target="_blank" rel="noreferrer">
+                        <BrutalButton size="sm" variant="outline" className="w-full md:w-auto">
+                          LinkedIn Profile
+                        </BrutalButton>
+                      </Link>
+                    )}
+                    {dev.instagram && (
+                      <Link href={dev.instagram} target="_blank" rel="noreferrer">
+                        <BrutalButton size="sm" variant="outline" className="w-full md:w-auto">
+                          Instagram
+                        </BrutalButton>
+                      </Link>
+                    )}
+                    {dev.github && (
+                      <Link href={dev.github} target="_blank" rel="noreferrer">
+                        <BrutalButton size="sm" variant="outline" className="w-full md:w-auto">
+                          GitHub
+                        </BrutalButton>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
